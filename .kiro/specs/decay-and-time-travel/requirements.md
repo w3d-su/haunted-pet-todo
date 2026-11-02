@@ -89,6 +89,7 @@ _User Story_: As a user who returns after being away, I want my pet's stats to h
 
 - 5.1: WHEN a pet is read or written AND `PetState.lastTickAt` is in the past, THEN the system SHALL apply a single `DECAY_TICK` covering `[lastTickAt, effectiveNow]`. The daily cron uses the same catch-up for users who have not been online.
 - 5.2: WHEN catch-up runs, THEN the system SHALL NOT simulate the gap as many one-hour ticks. One call with the real elapsed time is enough (additivity). Death is recorded by the reducer after that call so a split interval does not drop hunger or mood.
+- 5.3: WHEN catch-up computes a new pet state, THEN the system SHALL write that state back only when the reducer emitted an event OR the elapsed interval is greater than 60 seconds. Shorter gaps are applied in memory for the response and for a completion payload. They SHALL NOT compare-and-swap `pet_state.version`. When version retries are exhausted, the system SHALL return HTTP 503 with `Retry-After: 1`.
 
 ---
 

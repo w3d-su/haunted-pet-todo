@@ -18,7 +18,7 @@ pnpm test
 
 ## Supabase
 
-The SQL in `supabase/migrations/` is the schema (`tasks`, `events`, `pet_state`). Helpers in `src/lib/db/` talk to a real project. Tests never do: API handlers take an in-memory store behind the same operations (`getTasks`, `upsertTask`, `softDeleteTask`, `getPetState` / `savePetState`, `appendEvent`).
+The SQL in `supabase/migrations/` is the schema (`tasks`, `events`, `pet_state`). Helpers in `src/lib/db/` talk to a real project. API tests use an in-memory store behind the same operations (`getTasks`, `upsertTask`, `softDeleteTask`, `getPetState` / `savePetState`, `appendEvent`). `tests/db/` drives those helpers and `completion.ts` against Postgres, and only when opted in (below).
 
 1. Create a Supabase project and copy `.env.example` to `.env.local`.
 2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Leave the service-role key out of the client. Do not commit `.env.local`.
@@ -57,6 +57,19 @@ Decay runs when a pet or task route reads or writes, from `lastTickAt` to now. S
 Authenticated database roles can select their own rows and cannot write. The API writes with `SUPABASE_SERVICE_ROLE_KEY`.
 
 `DEMO_MODE=true` (server-only, not `NEXT_PUBLIC_`) is reserved for fast-forward. The column `pet_state.clock_offset_ms` stores a per-user offset added to wall time. Nothing in this slice writes it.
+
+## Database concurrency tests
+
+`tests/db/postgres-concurrency.test.ts` drops schemas `public` and `auth` and reapplies the migrations. It runs only when **both** are true:
+
+1. `HAUNTED_TEST_DATABASE_URL` is set, and
+2. the database name in that URL contains `test` (case-insensitive).
+
+If the URL is set but the name does not contain `test`, the file throws before any drop. If the URL is unset, the suite skips. CI's `postgres` job uses `postgres:17` and `haunted_test`, creates the `anon`, `authenticated`, and `service_role` roles from `tests/db/bootstrap.sql`, applies the migrations, then runs `tests/db`.
+
+```sh
+HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' pnpm exec vitest run tests/db
+```
 
 ## Kiro
 

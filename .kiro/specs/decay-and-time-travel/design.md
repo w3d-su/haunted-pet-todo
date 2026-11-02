@@ -300,6 +300,8 @@ RLS: SELECT/INSERT/DELETE for `auth.uid() = user_id`. No UPDATE (delete + re-ins
 
 Per-user `pet_state.clock_offset_ms` (bigint, default 0). Every read/write and the daily cron use `effectiveNow = SystemClock.now() + clock_offset_ms`. Fast-forward updates that column (auth required, `DEMO_MODE=true`). It must not write `last_tick_at` ahead of the effective clock: `decayStats` treats `now < lastTickAt` as a no-op, so a future `lastTickAt` would stall catch-up. A module singleton does not survive serverless isolates.
 
+Catch-up on a read is computed every time, but it is persisted only when the reducer emitted an event or more than 60 seconds have elapsed. A few milliseconds of decay stays in the response (and inside a completion's pet payload) so concurrent readers do not bump `version`. A completion that loses the version compare-and-swap reloads that one pet row, runs catch-up in memory, and calls `complete_task` again. It does not re-enter the read path's overdue writes. Exhausted retries are HTTP 503 with `Retry-After: 1`.
+
 ---
 
 ## State Diagram: Decay Tick Processing

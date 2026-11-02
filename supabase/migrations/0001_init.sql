@@ -98,8 +98,10 @@ create trigger pet_state_set_updated_at
   before update on public.pet_state
   for each row execute function public.set_updated_at();
 
+-- service_role only. anon and authenticated cannot execute this.
 -- Claim a task, compare-and-swap the pet, and insert events.
--- A version miss raises and rolls the claim back. Already-done returns conflict.
+-- A version miss raises SQLSTATE HA001 and rolls the claim back.
+-- Already-done returns conflict without raising.
 create or replace function public.complete_task(
   p_user_id uuid,
   p_task_id uuid,
@@ -188,7 +190,7 @@ begin
   returning version, clock_offset_ms into v_version, v_offset;
 
   if not found then
-    raise exception 'version_conflict' using errcode = 'P0001';
+    raise exception 'version_conflict' using errcode = 'HA001';
   end if;
 
   insert into public.events (user_id, event_type, payload)
@@ -205,3 +207,11 @@ begin
   );
 end;
 $$;
+
+comment on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
+  is 'service_role only';
+
+revoke all on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
+  to service_role;

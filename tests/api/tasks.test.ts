@@ -2,6 +2,8 @@ import { expect, it } from "vitest";
 import { deleteTask, getTasksRoute, patchTask, postTask } from "@/app/api/tasks/handlers";
 import { MAX_HP } from "@/lib/game/constants";
 import { initialPetState } from "@/lib/game/pet";
+import { SystemClock } from "@/lib/server/clock";
+import type { AppDeps } from "@/lib/server/stores";
 import { createMemoryWorld, request, USER_ID } from "../helpers/world";
 
 const NOW = Date.UTC(2026, 3, 2, 15);
@@ -115,6 +117,60 @@ it("lets a client mark a task done, but not clear an overdue zombie by setting t
   );
   expect(moved.status).toBe(200);
   expect(((await moved.json()) as { task: { status: string } }).task.status).toBe("todo");
+});
+
+it("twenty concurrent completions of one task yield one 200, nineteen 409s, and no 500s", async () => {
+  const clock = new SystemClock();
+  const start = clock.now();
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, () => clock.now());
+  world.pets.set(USER_ID, {
+    state: {
+      ...initialPetState(USER_ID, start, crypto.randomUUID(), "UTC"),
+      stage: "hatchling",
+      hp: 40,
+    },
+    clockOffsetMs: 0,
+    version: 1,
+  });
+  const created = await postTask(request("POST", "/api/tasks", { title: "Once" }), deps);
+  const { task } = (await created.json()) as { task: { id: string } };
+  const responses = await Promise.all(
+    Array.from({ length: 20 }, () =>
+      patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps),
+    ),
+  );
+  const statuses = responses.map((response) => response.status);
+  expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+  expect(statuses.filter((status) => status === 409)).toHaveLength(19);
+  expect(statuses.filter((status) => status === 500)).toHaveLength(0);
+  expect(statuses.filter((status) => status === 503)).toHaveLength(0);
+  expect(world.events.filter((event) => event.eventType === "TASK_COMPLETED")).toHaveLength(1);
+  const hp = world.pets.get(USER_ID)?.state.hp ?? 0;
+  expect(hp).toBeGreaterThan(49);
+  expect(hp).toBeLessThanOrEqual(50);
+});
+
+it("returns 503 with Retry-After when pet version retries are exhausted", async () => {
+  const world = createMemoryWorld();
+  const base = world.deps(USER_ID, NOW);
+  const created = await postTask(request("POST", "/api/tasks", { title: "Busy" }), base);
+  const { task } = (await created.json()) as { task: { id: string } };
+  const busy: AppDeps = {
+    ...base,
+    authorize: async (incoming) => {
+      const stores = await base.authorize(incoming);
+      if (!stores) return null;
+      return { ...stores, commitCompletion: async () => ({ status: "retry" }) };
+    },
+  };
+  const response = await patchTask(
+    request("PATCH", "/api/tasks", { id: task.id, status: "done" }),
+    busy,
+  );
+  expect(response.status).toBe(503);
+  expect(response.headers.get("retry-after")).toBe("1");
+  expect(world.tasks.find((item) => item.id === task.id)?.status).not.toBe("done");
 });
 
 it("two concurrent completions produce one 200 and one 409", async () => {

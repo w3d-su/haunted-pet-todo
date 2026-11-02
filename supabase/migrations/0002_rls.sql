@@ -32,7 +32,4 @@ create policy "users read own pet"
   to authenticated
   using (auth.uid() = user_id);
 
-revoke all on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
-  from public, anon, authenticated;
-grant execute on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
-  to service_role;
+-- complete_task is created, revoked, and granted in 0001_init.sql.

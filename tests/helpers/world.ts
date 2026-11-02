@@ -22,7 +22,7 @@ export interface MemoryWorld {
   tasks: Task[];
   pets: Map<string, PetSnapshot>;
   events: StoredEvent[];
-  deps: (userId: string | null, now: number) => AppDeps;
+  deps: (userId: string | null, now: number | (() => number)) => AppDeps;
 }
 
 function persistPet(state: PetState, clockOffsetMs: number, version: number): PetState {
@@ -153,8 +153,9 @@ export function createMemoryWorld(): MemoryWorld {
     pets,
     events,
     deps(userId, now) {
+      const clock = typeof now === "function" ? now : () => now;
       return {
-        now: () => now,
+        now: clock,
         newId: () => crypto.randomUUID(),
         authorize: async () =>
           userId

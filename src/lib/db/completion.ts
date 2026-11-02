@@ -2,8 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { petStateToRow } from "@/lib/db/pet";
 import type { CompletionCommit, CompletionResult } from "@/lib/server/stores";
 
-function isVersionConflict(error: { message: string; code?: string }): boolean {
-  return error.code === "P0001" || error.message.includes("version_conflict");
+/** SQLSTATE raised by complete_task when the pet version compare-and-swap misses. */
+const VERSION_CONFLICT = "HA001";
+
+function isVersionConflict(error: { code?: string }): boolean {
+  return error.code === VERSION_CONFLICT;
 }
 
 /**
