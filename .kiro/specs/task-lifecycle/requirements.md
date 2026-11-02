@@ -58,7 +58,7 @@ _User Story_: As a user, I want to edit a task's title, notes, category, size, o
 **Acceptance Criteria**:
 
 - 3.1: WHEN a PATCH request is received for a task, THEN the system SHALL validate the body with Zod and apply only the provided fields.
-- 3.2: WHEN a task's `status` is `"done"`, THEN the system SHALL reject further status changes (other than reading).
+- 3.2: WHEN a task's `status` is `"done"`, THEN the system SHALL reject further status changes. The client may set `status` only to `"done"`. An overdue task returns to `"todo"` only when its due time moves to the future. Completion uses `UPDATE ... WHERE status <> 'done'` so a concurrent complete gets HTTP 409.
 - 3.3: IF a task's `dueAt` is updated to a future time AND `status` was `"overdue"`, THEN the system SHALL set `status` back to `"todo"` and remove its associated zombie.
 
 **Requirement 4 — Delete task**
@@ -81,7 +81,7 @@ _User Story_: As a user who misses a task's due date, I want the task to visuall
 
 **Acceptance Criteria**:
 
-- 5.1: WHEN the cron tick runs AND a task has `dueAt <= now` AND `status = "todo"`, THEN the system SHALL set `status = "overdue"`.
+- 5.1: WHEN catch-up runs AND a task has `dueAt <= now` AND `status = "todo"`, THEN the system SHALL set `status = "overdue"` with `UPDATE ... WHERE status = 'todo'`. A task that was just completed is left `done`. The transition SHALL NOT upsert the rest of the row.
 - 5.2: WHEN a task transitions to `"overdue"`, THEN the system SHALL append an `TASK_OVERDUE` event to `events`.
 - 5.3: WHEN a task's `status` becomes `"overdue"`, THEN the system SHALL spawn exactly one `ZombieState` associated with that task's `id`.
 - 5.4: WHERE a task already has `status = "overdue"`, WHEN the cron tick runs again, THEN the system SHALL NOT spawn a second zombie for that task.
@@ -92,7 +92,7 @@ _User Story_: As a user with overdue tasks, I want zombies to drain my pet's HP 
 
 **Acceptance Criteria**:
 
-- 6.1: WHEN the hourly cron tick runs AND there are N active zombies, THEN the system SHALL apply a `ZOMBIE_DRAIN` event to the pet reducing HP by `N × ZOMBIE_DRAIN_PER_HOUR`.
+- 6.1: WHEN time passes with active zombies, THEN the system SHALL drain HP by `ZOMBIE_DRAIN_PER_HOUR` per zombie per hour, counting only the hours that task was actually overdue. Read/write catch-up does this; the daily cron is the backstop.
 - 6.2: WHEN `ZOMBIE_DRAIN` is applied AND `PetState.hp` would drop to 0, THEN the system SHALL set `PetState.status = "dead"` (handled by `applyPetEvent`).
 - 6.3: WHEN `PetState.status` is `"dead"` or `"tombstone"`, THEN the system SHALL NOT apply zombie drain (no further damage).
 
@@ -127,8 +127,8 @@ _User Story_: As a developer, I want the system to reject completing an already-
 
 **Acceptance Criteria**:
 
-- 9.1: WHEN a `PATCH` request attempts to set `status = "done"` on a task that already has `status = "done"`, THEN the system SHALL return HTTP 409 without modifying any state.
-- 9.2: IF a `TASK_COMPLETED` event is applied via `applyPetEvent` for a task that is already `done`, THEN the system SHALL NOT change `PetState.hp`, `hunger`, or `mood`.
+- 9.1: WHEN a `PATCH` request attempts to set `status = "done"` on a task that already has `status = "done"`, THEN the system SHALL return HTTP 409. Claiming the task (`status <> 'done'`), the pet version compare-and-swap, and the event inserts happen in one transaction. A duplicate completion returns 409 as soon as that claim fails. A version miss (`SQLSTATE HA001`) rolls the claim back; the server reloads the pet row, redoes catch-up in memory, and resubmits `complete_task` only (it does not re-enter other write paths). Events that catch-up emitted, including `PET_DIED`, go into that resubmit with the completion events, in order and without duplicates. Two concurrent completes of the same task yield one success and one 409. Concurrent completes of different tasks each reward the pet once. If those version retries are exhausted, the system SHALL return HTTP 503 with `Retry-After: 1`, not HTTP 500.
+- 9.2: IF a `TASK_COMPLETED` event is applied via `applyPetEvent` for a `taskId` already recorded on the pet, THEN the system SHALL NOT change `PetState.hp`, `hunger`, or `mood`. Two different tasks that share a completion timestamp and category both count.
 
 ---
 

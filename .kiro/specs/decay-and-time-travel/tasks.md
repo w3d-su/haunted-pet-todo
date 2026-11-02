@@ -2,53 +2,53 @@
 
 ## Week 1 (Nov 2–9): Clock Interface, Decay Function, Property Tests
 
-- [ ] 1. (Week 1) Implement `src/lib/game/clock.ts` — Clock interface and implementations
-  - [ ] 1.1 Define `Clock` interface with `now(): number`
-  - [ ] 1.2 Implement `SystemClock` (for use in API routes only, not game logic)
-  - [ ] 1.3 Implement `OffsetClock` with mutable `offsetMs`, `advance(ms)`, and `reset()`
-  - [ ] 1.4 Add guard in `OffsetClock.advance` that throws on negative input
+- [x] 1. (Week 1) Implement `src/lib/game/clock.ts` — Clock interface and implementations
+  - [x] 1.1 Define `Clock` interface with `now(): number`
+  - [x] 1.2 Implement `SystemClock` in `src/lib/server/clock.ts` (the only wall-clock call site; not inside `src/lib/game/`)
+  - [x] 1.3 Implement `OffsetClock` with mutable `offsetMs`, `advance(ms)`, and `reset()`
+  - [x] 1.4 Add guard in `OffsetClock.advance` that throws on negative input
     - Files: `src/lib/game/clock.ts`
   _Requirements: 1.1–1.5_
 
-- [ ] 2. (Week 1) Implement `src/lib/game/decay.ts` — decayStats and helpers
-  - [ ] 2.1 Implement `decayAmount(ratePerHour, elapsedHours)` — pure linear calculation
-  - [ ] 2.2 Implement `decayStats(pet, now)` with all guards (dead/tombstone, egg HP immunity, time-reversal, zero-elapsed)
-  - [ ] 2.3 Apply streak-break detection inside `decayStats` when `timeSinceCompletion > STREAK_BREAK_HOURS * 3_600_000`
-  - [ ] 2.4 Implement `decayRange(pet, fromMs, toMs)` convenience wrapper for tests
-  - [ ] 2.5 Clamp all outputs to their valid ranges before returning
+- [x] 2. (Week 1) Implement `src/lib/game/decay.ts` — decayStats and helpers
+  - [x] 2.1 Implement `decayAmount(ratePerHour, elapsedHours)` — pure linear calculation
+  - [x] 2.2 Implement `decayStats(pet, now)` with all guards (dead/tombstone, egg HP immunity, time-reversal, zero-elapsed)
+  - [x] 2.3 Apply streak-break detection inside `decayStats` when `timeSinceCompletion > STREAK_BREAK_HOURS * 3_600_000`
+  - [x] 2.4 Implement `decayRange(pet, fromMs, toMs)` convenience wrapper for tests
+  - [x] 2.5 Clamp all outputs to their valid ranges before returning
     - Files: `src/lib/game/decay.ts`
   _Requirements: 3.1–3.6, 4.1–4.3, 11.1–11.3_
 
-- [ ] 3. (Week 1) Wire `DECAY_TICK` event through `applyPetEvent` in `pet.ts`
-  - [ ] 3.1 Add `applyDecayTick` helper that calls `decayStats(state, event.toTime)` and checks for HP = 0 death trigger
-  - [ ] 3.2 When HP reaches 0, set `status = "dead"` in returned state (`stage` is NOT changed — it stays at the pet's last living stage so the tombstone renderer knows which form died)
+- [x] 3. (Week 1) Wire `DECAY_TICK` event through `applyPetEvent` in `pet.ts`
+  - [x] 3.1 Add `applyDecayTick` helper that calls `decayStats(state, event.toTime)` and checks for HP = 0 death trigger
+  - [x] 3.2 When HP reaches 0, set `status = "dead"` in returned state (`stage` is NOT changed — it stays at the pet's last living stage so the tombstone renderer knows which form died)
     - Files: `src/lib/game/pet.ts`
   _Requirements: 3.1, 5.1_
 
-- [ ] 4. (Week 1) Write unit tests for `decay.ts` and `clock.ts`
-  - [ ] 4.1 Test `decayStats` with dead/tombstone returns unchanged state
-  - [ ] 4.2 Test `decayStats` with egg: HP unchanged, hunger/mood decay
-  - [ ] 4.3 Test `decayStats` with `now = lastTickAt` returns identical state
-  - [ ] 4.4 Test `decayStats` with `now < lastTickAt` returns identical state
-  - [ ] 4.5 Test `decayStats` after 1h reduces stats by correct amount
-  - [ ] 4.6 Test HP clamp at 0 when decay exceeds remaining HP
-  - [ ] 4.7 Test streak break sets streak to 0 and applies mood penalty
-  - [ ] 4.8 Test `OffsetClock.advance` updates `now()` correctly
-  - [ ] 4.9 Test `OffsetClock.advance(-1)` throws
-  - [ ] 4.10 Test `OffsetClock.reset` returns offset to 0
+- [x] 4. (Week 1) Write unit tests for `decay.ts` and `clock.ts`
+  - [x] 4.1 Test `decayStats` with dead/tombstone returns unchanged state
+  - [x] 4.2 Test `decayStats` with egg: HP unchanged, hunger/mood decay
+  - [x] 4.3 Test `decayStats` with `now = lastTickAt` returns identical state
+  - [x] 4.4 Test `decayStats` with `now < lastTickAt` returns identical state
+  - [x] 4.5 Test `decayStats` after 1h reduces stats by correct amount
+  - [x] 4.6 Test HP clamp at 0 when decay exceeds remaining HP
+  - [x] 4.7 Test streak break sets streak to 0 and applies mood penalty
+  - [x] 4.8 Test `OffsetClock.advance` updates `now()` correctly
+  - [x] 4.9 Test `OffsetClock.advance(-1)` throws
+  - [x] 4.10 Test `OffsetClock.reset` returns offset to 0
     - Files: `tests/game/decay.test.ts`
   _Requirements: 1.3, 1.4, 3.1–3.6, 4.1–4.3_
 
-- [ ] 5. (Week 1) Write property-based tests for decay invariants
-  - [ ] 5.1 Build arbitraries: `arbAlivePetState`, `arbDeadOrTombstoneState`, `arbEggState`, `arbThreeOrderedTimestamps`
-  - [ ] 5.2 Write property test for Property P18 (HP bounds after N decay calls)
-  - [ ] 5.3 Write property test for Property P19 (decay additivity over split intervals)
-  - [ ] 5.4 Write property test for Property P21 (dead/tombstone immune to decay)
-  - [ ] 5.5 Write property test for Property P22 (egg HP immune)
-  - [ ] 5.6 Write property test for Property P23 (decay is monotone non-increasing)
-  - [ ] 5.7 Write property test for Property P24 (OffsetClock is monotone)
-  - [ ] 5.8 Write property test for Property P25 (zero elapsed = identity)
-  - [ ] 5.9 Write property test for Property P26 (hunger + mood in [0, 100])
+- [x] 5. (Week 1) Write property-based tests for decay invariants
+  - [x] 5.1 Build arbitraries: `arbAlivePetState`, `arbDeadOrTombstoneState`, `arbEggState`, `arbThreeOrderedTimestamps`
+  - [x] 5.2 Write property test for Property P18 (HP bounds after N decay calls)
+  - [x] 5.3 Write property test for Property P19 (decay additivity over split intervals)
+  - [x] 5.4 Write property test for Property P21 (dead/tombstone immune to decay)
+  - [x] 5.5 Write property test for Property P22 (egg HP immune)
+  - [x] 5.6 Write property test for Property P23 (decay is monotone non-increasing)
+  - [x] 5.7 Write property test for Property P24 (OffsetClock is monotone)
+  - [x] 5.8 Write property test for Property P25 (zero elapsed = identity)
+  - [x] 5.9 Write property test for Property P26 (hunger + mood in [0, 100])
     - Files: `tests/game/invariants.property.ts`
   _Requirements: P18, P19, P21–P26 (P20 is Week 2 task 10)_
 
@@ -66,22 +66,22 @@
   _Requirements: 5.1, 5.2, 6.1–6.5_
 
 - [ ] 7. (Week 2) Add cron schedule to `vercel.json`
-  - [ ] 7.1 Add `"crons": [{ "path": "/api/cron/decay", "schedule": "0 * * * *" }]`
+  - [ ] 7.1 Add `"crons": [{ "path": "/api/cron/decay", "schedule": "0 8 * * *" }]` (daily; Hobby rejects hourly) only once `src/app/api/cron/decay/route.ts` exists. Do not point `vercel.json` at a missing route.
     - Files: `vercel.json`
   _Requirements: 6.5_
 
 - [ ] 8. (Week 2) Implement `src/app/api/demo/fast-forward/route.ts`
-  - [ ] 8.1 Check `process.env.NEXT_PUBLIC_DEMO_MODE === "true"`; return 403 if not
+  - [ ] 8.1 Require auth. Return 403 unless server `DEMO_MODE === "true"`. Add `N` hours to `pet_state.clock_offset_ms`; do not push `lastTickAt` past the effective clock.
   - [ ] 8.2 Parse request body with `FastForwardBodySchema` (Zod); return 400 if invalid
-  - [ ] 8.3 Implement `reset: true` branch: reset module-level clock offset to 0
-  - [ ] 8.4 Implement `hours: N` branch: loop N times advancing OffsetClock by 1h each iteration and running full decay logic
+  - [ ] 8.3 Implement `reset: true` branch: set `clock_offset_ms` to 0 and clamp future `lastTickAt` (and other future game timestamps) to the new effective now
+  - [ ] 8.4 Implement `hours: N` branch: add N hours to `clock_offset_ms`, then run the same catch-up as a read
   - [ ] 8.5 Ensure each iteration of the loop calls the same code path as the real cron handler (shared helper function, not duplicated logic)
   - [ ] 8.6 Return updated `PetState` after all ticks
     - Files: `src/app/api/demo/fast-forward/route.ts`
   _Requirements: 7.1–7.5_
 
 - [ ] 9. (Week 2) Implement `DemoControls.tsx` component
-  - [ ] 9.1 Gate rendering on `process.env.NEXT_PUBLIC_DEMO_MODE === "true"` using a conditional import or env check
+  - [ ] 9.1 Render only when the server reports `DEMO_MODE === "true"` (not a `NEXT_PUBLIC_` env flag)
   - [ ] 9.2 Render "+1h", "+6h", "+24h", and "Reset" `PixelButton` components
   - [ ] 9.3 Each button calls `POST /api/demo/fast-forward` with the correct body and triggers full data refresh on success
   - [ ] 9.4 Show a loading indicator while the request is in-flight; disable buttons during loading
@@ -98,7 +98,7 @@
 ## Week 3 (Nov 16–23): Web Push, Habitual-Time Reminders
 
 - [ ] 11. (Week 3) Implement `src/lib/push/vapid.ts` and `notify.ts`
-  - [ ] 11.1 Implement `getVapidKeys()` reading from `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` env vars
+  - [ ] 11.1 Implement `getVapidKeys()` reading from `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
   - [ ] 11.2 Implement `sendPushNotification(subscription, payload)` using `web-push` package
   - [ ] 11.3 Wrap `webpush.sendNotification` in try/catch; log errors without throwing
     - Files: `src/lib/push/vapid.ts`, `src/lib/push/notify.ts`

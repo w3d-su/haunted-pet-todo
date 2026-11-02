@@ -14,9 +14,9 @@ inclusion: always
 | Animation | **Framer Motion 12** | Stepped/snappy easing only; respect `prefers-reduced-motion` |
 | Database | **Supabase** (Postgres) | Client from `@supabase/supabase-js` |
 | LLM | Provider-agnostic server route | Currently OpenAI-compatible; keys only in env vars, never client bundle |
-| Testing | **Vitest** + **fast-check** | Unit + property-based tests; coverage via `v8` |
+| Testing | **Vitest** + **fast-check** | Unit + property-based tests |
 | Package manager | **pnpm** | Lock file committed; do not use npm or yarn |
-| Deploy | **Vercel** | `vercel.json` for cron; `NEXT_PUBLIC_DEMO_MODE` flag |
+| Deploy | **Vercel** | `vercel.json` daily cron (Hobby); server `DEMO_MODE` flag |
 | Push notifications | **Web Push** (VAPID) | `web-push` npm package; server-side only |
 
 ## Versions Policy
@@ -44,7 +44,7 @@ CI must run `pnpm build && pnpm typecheck && pnpm lint && pnpm test`.
 
 **All game logic lives in `src/lib/game/`.** Functions in this directory:
 - Accept a `now: number` parameter (Unix ms) or a `Clock` interface (`{ now(): number }`).
-- **Never call `Date.now()` directly.** Never call `new Date()` without arguments.
+- **Never call `Date.now()` or `new Date()`.** ESLint `no-restricted-syntax` fails CI on `src/lib/game/**`. The wall clock is `SystemClock` in `src/lib/server/clock.ts`.
 - Are pure and deterministic: same inputs → same outputs, no side effects.
 - Export only plain functions and types; no React, no Supabase, no `fetch`.
 
@@ -78,10 +78,7 @@ catch (e) {
 
 ### 4. Supabase Row Level Security
 
-Every table must have RLS enabled. Policies:
-- `tasks`: users can only SELECT/INSERT/UPDATE/DELETE their own rows (`auth.uid() = user_id`).
-- `pet_state`: same.
-- `events`: INSERT only for authenticated user; no DELETE (append-only audit log).
+Every table must have RLS enabled. Authenticated clients are **select-only** (`auth.uid() = user_id`). Inserts, updates, and deletes go through the server with the service role, which bypasses RLS. Do not grant authenticated write access: the public anon key would let a signed-in user PostgREST their own `hp`, `status`, or `clock_offset_ms`, or point `parent_id` at another user's task. The API still checks that a parent task belongs to the caller.
 
 Do not disable RLS for convenience. Write migrations to create policies, not manual dashboard clicks.
 
@@ -94,10 +91,10 @@ Do not disable RLS for convenience. Write migrations to create policies, not man
 | `SUPABASE_SERVICE_ROLE_KEY` | server-only | Service role key — never expose to client |
 | `OPENAI_API_KEY` | server-only | LLM provider API key |
 | `OPENAI_BASE_URL` | server-only | Override for compatible providers (optional) |
-| `VAPID_PUBLIC_KEY` | public | Web Push VAPID public key |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | public | Web Push VAPID public key (the browser must read it) |
 | `VAPID_PRIVATE_KEY` | server-only | Web Push VAPID private key |
-| `CRON_SECRET` | server-only | Shared secret verified in cron route handler |
-| `NEXT_PUBLIC_DEMO_MODE` | public | `"true"` enables `DemoControls` component |
+| `CRON_SECRET` | server-only | Shared secret verified in the daily cron route |
+| `DEMO_MODE` | server-only | `"true"` allows fast-forward. Not a `NEXT_PUBLIC_` variable |
 
 Never commit `.env.local`. Provide `.env.example` with placeholder values.
 

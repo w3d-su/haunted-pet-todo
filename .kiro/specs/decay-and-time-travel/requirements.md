@@ -19,9 +19,9 @@ The central correctness guarantee is **additivity**: applying decay over interva
 | **DECAY_RATE_MOOD** | Mood reduction per hour. |
 | **Catch-up** | Computing accumulated decay when the server restarts or the cron job runs after being missed. |
 | **Fast-forward** | Developer/demo feature that advances the clock offset and replays game logic. |
-| **NEXT_PUBLIC_DEMO_MODE** | Environment variable; when `"true"`, enables `DemoControls`. |
-| **DemoControls** | UI component that triggers fast-forward API calls (+1h, +6h, +24h, reset). |
-| **Tick** | One invocation of the hourly cron job or one fast-forward step. |
+| **DEMO_MODE** | Server-only env var. `"true"` allows fast-forward. It is not a `NEXT_PUBLIC_` variable. |
+| **DemoControls** | UI component that triggers fast-forward API calls (+1h, +6h, +24h, reset). Shown only when the server says demo mode is on. |
+| **Tick** | One catch-up step, or one fast-forward hour. The daily cron is a backstop, not the only clock. |
 | **lastTickAt** | The `PetState` field recording when the last tick was processed (Unix ms). |
 | **Habitual time** | The time-of-day window in which a user most often completes tasks, inferred from event history. |
 | **Web Push** | Browser push notification via VAPID. |
@@ -40,7 +40,7 @@ _User Story_: As a developer, I want all game timing to go through an injectable
 **Acceptance Criteria**:
 
 - 1.1: WHEN any function in `src/lib/game/` needs the current time, THEN the system SHALL accept it as a `now: number` parameter (Unix ms) and SHALL NOT call `Date.now()` directly.
-- 1.2: WHEN `SystemClock.now()` is called, THEN the system SHALL return `Date.now()`.
+- 1.2: WHEN `SystemClock.now()` is called, THEN the system SHALL return the wall-clock time. `SystemClock` lives in `src/lib/server/clock.ts`, outside `src/lib/game/`.
 - 1.3: WHEN `OffsetClock.now()` is called, THEN the system SHALL return `base + offsetMs`.
 - 1.4: WHEN `OffsetClock.advance(ms)` is called, THEN the system SHALL add `ms` to `offsetMs` so subsequent `now()` calls reflect the advance.
 - 1.5: WHERE any CI test uses a clock, THEN the system SHALL use `OffsetClock` with a fixed base, never `SystemClock`.
@@ -87,8 +87,9 @@ _User Story_: As a user who returns after being away, I want my pet's stats to h
 
 **Acceptance Criteria**:
 
-- 5.1: WHEN the cron job runs AND `PetState.lastTickAt` is more than 1 hour in the past, THEN the system SHALL apply a single `DECAY_TICK` event covering the full elapsed period `[lastTickAt, now]`.
-- 5.2: WHEN the cron job runs, THEN the system SHALL NOT apply multiple small ticks to simulate hourly steps — a single call with correct elapsed time suffices (due to additivity).
+- 5.1: WHEN a pet is read or written AND `PetState.lastTickAt` is in the past, THEN the system SHALL apply a single `DECAY_TICK` covering `[lastTickAt, effectiveNow]`. The daily cron uses the same catch-up for users who have not been online.
+- 5.2: WHEN catch-up runs, THEN the system SHALL NOT simulate the gap as many one-hour ticks. One call with the real elapsed time is enough (additivity). Death is recorded by the reducer after that call so a split interval does not drop hunger or mood.
+- 5.3: WHEN catch-up computes a new pet state, THEN the system SHALL write that state back only when the reducer emitted an event OR the elapsed interval is greater than 60 seconds. Shorter gaps are applied in memory for the response and for a completion payload. They SHALL NOT compare-and-swap `pet_state.version`. When version retries are exhausted, the system SHALL return HTTP 503 with `Retry-After: 1`.
 
 ---
 
@@ -104,7 +105,7 @@ _User Story_: As a developer, I want a Vercel Cron job to fire every hour so tha
 - 6.2: IF the authorization header is missing or incorrect, THEN the system SHALL return HTTP 401 and exit without modifying any state.
 - 6.3: WHEN the cron handler processes a user, THEN the system SHALL: (a) fetch `PetState`, (b) apply `DECAY_TICK`, (c) compute new zombie drain, (d) apply `ZOMBIE_DRAIN`, (e) check for newly overdue tasks, (f) save updated `PetState`, (g) append events.
 - 6.4: WHEN the cron handler finishes, THEN the system SHALL return HTTP 200 with a summary JSON payload.
-- 6.5: WHEN `vercel.json` is read, THEN the system SHALL include a `crons` entry scheduling `/api/cron/decay` at `"0 * * * *"` (every hour).
+- 6.5: WHEN `vercel.json` is read, THEN the system SHALL schedule `/api/cron/decay` once per day (`"0 8 * * * *"`). Vercel Hobby rejects cron expressions that run more than once a day, and Hobby timing is only guaranteed within the hour. The cron is a backstop. Play sessions catch up from `lastTickAt`.
 
 ---
 
@@ -116,9 +117,9 @@ _User Story_: As a demo presenter, I want to advance the in-game clock by 1 hour
 
 **Acceptance Criteria**:
 
-- 7.1: WHEN `POST /api/demo/fast-forward` is called AND `NEXT_PUBLIC_DEMO_MODE !== "true"`, THEN the system SHALL return HTTP 403.
-- 7.2: WHEN `POST /api/demo/fast-forward` is called with `{ hours: N }` where N ∈ {1, 6, 24}, THEN the system SHALL: advance the server-side `OffsetClock` by `N * 3_600_000` ms, replay N one-hour ticks by calling the same `DECAY_TICK` + `ZOMBIE_DRAIN` logic as the real cron job, and save the resulting `PetState`.
-- 7.3: WHEN `POST /api/demo/fast-forward` is called with `{ reset: true }`, THEN the system SHALL reset the clock offset to 0.
+- 7.1: WHEN `POST /api/demo/fast-forward` is called AND the server env `DEMO_MODE !== "true"`, OR the caller is not signed in, THEN the system SHALL return HTTP 403 and SHALL NOT change state.
+- 7.2: WHEN `POST /api/demo/fast-forward` is called with `{ hours: N }` where N ∈ {1, 6, 24}, THEN the system SHALL add `N * 3_600_000` to that user's `pet_state.clock_offset_ms`, then run the same catch-up as a normal read (`effectiveNow = wall clock + offset`). It SHALL NOT write `lastTickAt` beyond that effective time.
+- 7.3: WHEN `POST /api/demo/fast-forward` is called with `{ reset: true }`, THEN the system SHALL set `clock_offset_ms` to 0 AND clamp `lastTickAt` and any other stored game timestamps that would still be in the future relative to the new effective now down to that now. Resetting the offset alone leaves `now < lastTickAt`, and decay then no-ops.
 - 7.4: WHEN fast-forwarding N hours, THEN the system SHALL produce the same `PetState` as if the real cron had fired N times (Property P20).
 - 7.5: WHEN `POST /api/demo/fast-forward` is called, THEN the system SHALL validate the request body with Zod.
 
@@ -128,8 +129,8 @@ _User Story_: As a demo presenter, I want a visible control panel in the UI so t
 
 **Acceptance Criteria**:
 
-- 8.1: WHEN `NEXT_PUBLIC_DEMO_MODE === "true"`, THEN the system SHALL render the `DemoControls` component on every page.
-- 8.2: WHEN `NEXT_PUBLIC_DEMO_MODE !== "true"`, THEN the system SHALL NOT render `DemoControls` and SHALL NOT include it in the production bundle.
+- 8.1: WHEN the server env `DEMO_MODE === "true"`, THEN the system SHALL render `DemoControls`. The client learns this from the server, not from a `NEXT_PUBLIC_` flag.
+- 8.2: WHEN `DEMO_MODE !== "true"`, THEN the system SHALL NOT render `DemoControls` and fast-forward SHALL return 403.
 - 8.3: WHEN `DemoControls` renders, THEN the system SHALL display buttons for "+1h", "+6h", "+24h", and "Reset".
 - 8.4: WHEN a `DemoControls` button is clicked, THEN the system SHALL call `POST /api/demo/fast-forward` with the corresponding `hours` value, then trigger a full page data refresh.
 

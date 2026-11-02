@@ -18,7 +18,7 @@ flowchart TD
         AP[pet.ts\napplyPetEvent]
         EVO[evolution.ts\ncanEvolve · resolveEvolvedForm]
         CO[constants.ts\nMAX_HP · DECAY_RATES · thresholds]
-        CL[clock.ts\nClock · SystemClock · OffsetClock]
+        CL[clock.ts\nClock · OffsetClock]
     end
 
     subgraph "src/lib/db/"
@@ -92,8 +92,7 @@ export const STREAK_BREAK_MOOD_PENALTY = 20;
 
 ### `src/lib/game/clock.ts`
 
-> **Owned by decay-and-time-travel spec (task 1).** See `decay-and-time-travel/design.md` for the full `Clock`, `SystemClock`, and `OffsetClock` interface and implementation. This spec imports from `src/lib/game/clock.ts` but does not define it.
-> **Note**: `SystemClock.now()` calls `Date.now()` — this is the ONE permitted call site outside `src/lib/game/`. It is used only in API route bootstrapping (`src/app/api/`), never inside game logic functions.
+> **Owned by decay-and-time-travel spec (task 1).** `src/lib/game/clock.ts` exports `Clock` and `OffsetClock` only. `SystemClock` lives in `src/lib/server/clock.ts` and is the one wall-clock call site, outside `src/lib/game/`. API routes read it once and pass `now: number` in.
 
 ### `src/lib/game/pet.ts`
 
@@ -132,8 +131,10 @@ export interface TombstoneRecord {
 }
 
 export interface PetState {
-  readonly id: string;           // uuid, stable across rebirths of same user
+  readonly id: string;           // caller-supplied; stable across rebirths. Not generated inside the reducer.
   readonly userId: string;
+  /** IANA zone for evolution hours and streak days. Not the server's zone. */
+  readonly timeZone: string;
   readonly stage: PetStage;
   readonly status: PetStatus;
   readonly hp: number;           // [0, MAX_HP]
@@ -161,10 +162,11 @@ export interface PetState {
 }
 
 /** Creates a fresh PetState for a brand-new user (no graveyard). */
-export function initialPetState(userId: string, now: number): PetState {
+export function initialPetState(userId: string, now: number, id: string, timeZone: string): PetState {
   return {
-    id: crypto.randomUUID(),
+    id,
     userId,
+    timeZone,
     stage: "egg",
     status: "alive",
     hp: MAX_HP,
@@ -188,9 +190,10 @@ export function initialPetState(userId: string, now: number): PetState {
  * Rebirths a tombstone pet into a new egg,
  * preserving the graveyard.
  */
-export function rebirthPet(state: PetState, now: number): PetState {
+export function rebirthPet(state: PetState, now: number, tombstoneId: string): PetState {
+  if (state.status !== "tombstone") return state;
   const record: TombstoneRecord = {
-    id: crypto.randomUUID(),
+    id: tombstoneId,
     diedAt: state.lastTickAt ?? now,
     stage: state.stage,
     finalHp: state.hp,
@@ -201,21 +204,30 @@ export function rebirthPet(state: PetState, now: number): PetState {
     overdueTaskIds: [],
   };
   return {
-    ...initialPetState(state.userId, now),
-    id: state.id,
+    ...initialPetState(state.userId, now, state.id, state.timeZone),
     graveyard: [...state.graveyard, record],
   };
 }
 
 /**
  * Central pure reducer. Applies a single GameEvent to PetState.
- * Never mutates input. Never calls Date.now().
+ * Never mutates input. Does not read the wall clock.
+ * Returns `{ state, emitted }`. Early exits use `emitted: []`.
+ * A second `TASK_COMPLETED` for a `taskId` already in `recentCompletionTaskIds`
+ * is a no-op. A different `taskId` still counts when `completedAt` and `category` match.
+ * `hoursAsAdult` shown to clients is derived from `becameAdultAt` and `now`.
+ * Catch-up does not write a dead pet just to slide `lastTickAt` forward.
  */
+export interface PetReduction {
+  readonly state: PetState;
+  readonly emitted: readonly GameEvent[];
+}
+
 export function applyPetEvent(
   state: PetState,
   event: GameEvent,
   now: number
-): PetState {
+): PetReduction {
   // Tombstone absorbs everything except REBIRTH and EPITAPH_READY
   if (
     state.status === "tombstone" &&
@@ -283,7 +295,7 @@ export type GameEvent =
   | { type: "DECAY_TICK"; fromTime: number; toTime: number }
   | { type: "ZOMBIE_DRAIN"; zombieCount: number; fromTime: number; toTime: number }
   | { type: "EPITAPH_READY"; epitaph: string }
-  | { type: "REBIRTH" }
+  | { type: "REBIRTH"; tombstoneId: string }
   | { type: "PET_HATCHED" }
   | { type: "PET_GREW_UP" }
   | { type: "PET_EVOLVED"; newStage: PetStage }
@@ -321,26 +333,34 @@ export function resolveEvolvedForm(state: PetState): EvolvedAdultStage {
   let earlyBird = 0;
   let scholar = 0;
 
+  if (n === 0) return "adult_haunter";
+
   for (let i = 0; i < n; i++) {
-    const hour = new Date(timestamps[i]).getUTCHours(); // caller converts to local hour
-    const hourLocal = hourFromTimestamp(timestamps[i]);
+    const hourLocal = hourFromTimestamp(timestamps[i], state.timeZone);
     const cat = categories[i] ?? "";
 
+    // 05:00–05:59 counts as night only, so night and early bird are disjoint.
     if (hourLocal >= 22 || hourLocal < 6) nightOwl++;
     else if (hourLocal >= 5 && hourLocal < 11) earlyBird++;
     if (cat === "study" || cat === "work") scholar++;
   }
 
-  const majority = Math.ceil(n / 2);
+  const majority = Math.floor(n / 2) + 1;
   if (nightOwl >= majority) return "adult_night_owl";
   if (earlyBird >= majority) return "adult_early_bird";
   if (scholar >= majority) return "adult_scholar";
   return "adult_haunter";
 }
 
-/** Extract local hour (0–23) from a Unix ms timestamp. */
-export function hourFromTimestamp(ts: number): number {
-  return new Date(ts).getHours();
+/** Local hour 0–23 in an IANA zone. Uses Intl, not the server's zone. */
+export function hourFromTimestamp(ts: number, timeZone: string): number {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    hourCycle: "h23",
+  }).formatToParts(ts).find((part) => part.type === "hour");
+  const value = Number(hour?.value ?? "0");
+  return value === 24 ? 0 : value;
 }
 ```
 
@@ -357,12 +377,16 @@ See `PetState`, `TombstoneRecord`, `PetStage`, `PetStatus` above.
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` | Stable across rebirths |
-| `user_id` | `uuid` | NOT NULL, FK → `auth.users(id)` | RLS anchor |
+| `user_id` | `uuid` | NOT NULL, UNIQUE, FK → `auth.users(id)` | RLS anchor; one pet per user |
+| `time_zone` | `text` | NOT NULL, default `'UTC'` | IANA zone for local hour and streak day |
+| `clock_offset_ms` | `bigint` | NOT NULL, default `0`, `CHECK (>= 0)` | Demo offset added to wall time. Not a `PetState` field |
 | `stage` | `text` | NOT NULL | One of the `PetStage` literals |
 | `status` | `text` | NOT NULL, default `'alive'` | `alive` / `dead` / `tombstone` |
-| `hp` | `integer` | NOT NULL, default 100, `CHECK (hp >= 0)` | |
-| `hunger` | `integer` | NOT NULL, default 100, `CHECK (hunger BETWEEN 0 AND 100)` | |
-| `mood` | `integer` | NOT NULL, default 100, `CHECK (mood BETWEEN 0 AND 100)` | |
+| `hp` | `double precision` | NOT NULL, default 100, `CHECK (hp >= 0 AND hp <= 100)` | Do not round on write |
+| `version` | `integer` | NOT NULL, default 1 | Compare-and-swap for catch-up writes |
+| `died_at` | `timestamptz` | nullable | When HP reached 0, not when a later read noticed |
+| `hunger` | `double precision` | NOT NULL, default 100, `CHECK (hunger >= 0 AND hunger <= 100)` | Do not round on write |
+| `mood` | `double precision` | NOT NULL, default 100, `CHECK (mood >= 0 AND mood <= 100)` | Do not round on write |
 | `current_streak` | `integer` | NOT NULL, default 0 | |
 | `tasks_completed_total` | `integer` | NOT NULL, default 0 | |
 | `last_completion_at` | `timestamptz` | nullable | |
@@ -424,6 +448,7 @@ stateDiagram-v2
 | Stats underflow | Clamped to 0 via `Math.max(0, value)` |
 | Stats overflow | Clamped to MAX_HP / 100 via `Math.min(MAX, value)` |
 | `rebirthPet` called on non-tombstone state | Guard: returns `state` unchanged |
+| `PATCH /api/pet` body is not `REBIRTH` or a time-zone update | HTTP 400. `TASK_COMPLETED`, `DECAY_TICK`, `ZOMBIE_DRAIN`, and other game events are server-produced only |
 | `resolveEvolvedForm` called with empty history | Returns `"adult_haunter"` (default) |
 | `crypto.randomUUID` unavailable | Caller must ensure Node ≥ 19 / Web Crypto available |
 

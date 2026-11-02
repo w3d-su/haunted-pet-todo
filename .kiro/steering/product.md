@@ -60,7 +60,7 @@ The canonical stage names used everywhere in code, database, and UI:
 | `hatchling` | Hatchling | First task completed |
 | `adult` | Adult | 7+ tasks completed total, streak ≥ 3 |
 | `adult_night_owl` | Night Owl | Evolved; majority of last 10 completions between 22:00–05:59 |
-| `adult_early_bird` | Early Bird | Evolved; majority of last 10 completions between 05:00–10:59 |
+| `adult_early_bird` | Early Bird | Evolved; majority of last 10 completions between 06:00–10:59. 05:00–05:59 counts as night owl |
 | `adult_scholar` | Scholar | Evolved; majority of last 10 completions in `study` or `work` category |
 | `adult_haunter` | Haunter | Evolved; default form when no other criterion is met |
 
@@ -88,7 +88,7 @@ The canonical stage names used everywhere in code, database, and UI:
 - **Public repo**: OSI-approved open-source license (MIT) in root LICENSE file.
 - **Committed .kiro/**: the `.kiro/` directory (steering, hooks, specs) must be committed and visible in the public repo — it is part of the judging submission.
 - **3-minute demo**: the demo video must fit in 3 minutes. Prioritize the core loop (create task → pet reacts → overdue → zombie → death → epitaph → rebirth) over stretch features.
-- **Fast-forward demo control**: a `DemoControls` component (visible only when `NEXT_PUBLIC_DEMO_MODE=true`) must let the demo presenter advance the in-game clock by 1 h, 6 h, or 24 h instantly. This must call the same pure game-logic functions as the real cron job.
+- **Fast-forward demo control**: `DemoControls` is shown only when the server env `DEMO_MODE=true`. It advances that user's `clock_offset_ms` by 1 h, 6 h, or 24 h and then runs the same catch-up as a normal read. The client cannot turn this on with a public env var.
 
 ## "Done" Criteria for Judging
 

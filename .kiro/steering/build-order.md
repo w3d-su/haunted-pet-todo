@@ -16,7 +16,7 @@ This file defines the single authoritative execution order for a coding agent wo
 |---|---|---|
 | 1 | pet-state-machine/tasks.md task 1 | Project scaffold, tooling, `.env.example`, `vercel.json` skeleton |
 | 2 | pet-state-machine/tasks.md task 2 | `src/lib/game/constants.ts` |
-| 3 | decay-and-time-travel/tasks.md task 1 | `src/lib/game/clock.ts` (`Clock`, `SystemClock`, `OffsetClock`) |
+| 3 | decay-and-time-travel/tasks.md task 1 | `src/lib/game/clock.ts` (`Clock`, `OffsetClock`); `SystemClock` in `src/lib/server/clock.ts` |
 | 4 | pet-state-machine/tasks.md task 3 | _(dependency note — no code, clock.ts already done)_ |
 | 5 | pet-state-machine/tasks.md task 4 | `src/lib/game/events.ts` (`GameEvent` union) |
 | 6 | pet-state-machine/tasks.md task 5 | `src/lib/game/pet.ts` (`PetState`, `PetStage`, `PetStatus`, `initialPetState`, `rebirthPet`) |
@@ -49,7 +49,7 @@ This file defines the single authoritative execution order for a coding agent wo
 | Order | Spec / Task | What it creates |
 |---|---|---|
 | 1 | decay-and-time-travel/tasks.md task 6 | `src/app/api/cron/decay/route.ts` (full cron handler — decay + zombie drain + epitaph trigger) |
-| 2 | decay-and-time-travel/tasks.md task 7 | `vercel.json` cron schedule entry |
+| 2 | decay-and-time-travel/tasks.md task 7 | `vercel.json` daily cron (`0 8 * * *`) only after the cron route exists. Hobby cannot run an hourly cron. |
 | 3 | task-lifecycle/tasks.md task 12 | Extend `src/app/api/cron/decay/route.ts` with overdue-task check and `TASK_OVERDUE` events |
 | 4 | decay-and-time-travel/tasks.md task 8 | `src/app/api/demo/fast-forward/route.ts` |
 | 5 | pet-state-machine/tasks.md task 12 | `src/app/api/pet/route.ts` |
@@ -106,4 +106,4 @@ This file defines the single authoritative execution order for a coding agent wo
 3. **Clock ownership**: `src/lib/game/clock.ts` is owned by `decay-and-time-travel/tasks.md task 1`. All other specs import from it; they do not re-implement it.
 4. **Cron route ownership**: `src/app/api/cron/decay/route.ts` is created by `decay-and-time-travel/tasks.md task 6` and extended by `task-lifecycle/tasks.md task 12`. Do not create it twice.
 5. **Week gate**: Do not start Week 2 work until the Week 1 definition of done is met.
-6. **No `Date.now()` in `src/lib/game/`**: The `no-date-now-guard` hook will block saves that violate this rule.
+6. **No `Date.now()` in `src/lib/game/`**: ESLint rejects it in CI. The `no-date-now-guard` hook runs that same rule after a save. `PostFileSave` cannot block the save.

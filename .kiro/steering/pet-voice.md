@@ -1,6 +1,6 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: "src/lib/ai/**,src/components/pet/**"
+fileMatchPattern: ["src/lib/ai/**", "src/components/pet/**"]
 ---
 
 # Haunted Pet To-Do — Pet Voice Steering
