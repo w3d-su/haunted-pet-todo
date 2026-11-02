@@ -55,7 +55,7 @@ function bind(column: string, value: unknown): { value: unknown; cast: string } 
 }
 
 class Query implements PromiseLike<Result> {
-  private action: "select" | "insert" | "update" | "upsert" = "select";
+  private action: "select" | "insert" | "update" | "upsert" | "delete" = "select";
   private values: Record<string, unknown> = {};
   private filters: Filter[] = [];
   private orderBy: { column: string; ascending: boolean } | null = null;
@@ -91,6 +91,12 @@ class Query implements PromiseLike<Result> {
     this.action = "upsert";
     this.values = values;
     this.onConflict = options?.onConflict ?? null;
+    this.expectation = "none";
+    return this;
+  }
+
+  delete(): this {
+    this.action = "delete";
     this.expectation = "none";
     return this;
   }
@@ -177,16 +183,30 @@ class Query implements PromiseLike<Result> {
       sql = `update public.${ident(this.table)} set ${assignments.join(", ")}`;
       if (where) sql += ` where ${where}`;
       if (this.expectation !== "none") sql += " returning *";
+    } else if (this.action === "delete") {
+      const where = this.whereClause(placeholder);
+      sql = `delete from public.${ident(this.table)}`;
+      if (where) sql += ` where ${where}`;
+      if (this.expectation !== "none") sql += " returning *";
     } else {
       const columns = entries.map(([column]) => ident(column)).join(", ");
       const values = entries.map(([column, value]) => placeholder(column, value)).join(", ");
       sql = `insert into public.${ident(this.table)} (${columns}) values (${values})`;
       if (this.action === "upsert" && this.onConflict) {
+        const conflict = this.onConflict
+          .split(",")
+          .map((column) => column.trim())
+          .filter((column) => column.length > 0);
+        const conflictSet = new Set(conflict);
         const sets = entries
-          .filter(([column]) => column !== this.onConflict)
+          .filter(([column]) => !conflictSet.has(column))
           .map(([column]) => `${ident(column)} = excluded.${ident(column)}`)
           .join(", ");
-        sql += ` on conflict (${ident(this.onConflict)}) do update set ${sets}`;
+        const target = conflict.map((column) => ident(column)).join(", ");
+        sql +=
+          sets.length > 0
+            ? ` on conflict (${target}) do update set ${sets}`
+            : ` on conflict (${target}) do nothing`;
       }
       if (this.expectation !== "none") sql += " returning *";
     }

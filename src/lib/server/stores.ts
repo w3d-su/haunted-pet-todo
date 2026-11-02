@@ -49,12 +49,31 @@ export type CompletionResult =
   | { status: "conflict" }
   | { status: "retry" };
 
+export interface TimelineEntry {
+  readonly eventType: string;
+  readonly payload: Record<string, unknown>;
+}
+
 export interface EventStore {
   appendEvent(
     userId: string,
     eventType: string,
     payload: Record<string, unknown>,
   ): Promise<void>;
+  /** Timeline order, oldest first. */
+  listEvents(userId: string): Promise<readonly TimelineEntry[]>;
+}
+
+export interface PushSubscription {
+  readonly endpoint: string;
+  readonly p256dh: string;
+  readonly auth: string;
+}
+
+export interface PushStore {
+  list(userId: string): Promise<readonly PushSubscription[]>;
+  upsert(userId: string, subscription: PushSubscription): Promise<void>;
+  remove(userId: string, endpoint: string): Promise<void>;
 }
 
 export interface ClockShift {
@@ -72,6 +91,7 @@ export interface AuthedStores {
   readonly pets: PetStore;
   readonly tasks: TaskStore;
   readonly events: EventStore;
+  readonly push: PushStore;
   /**
    * Claim the task, CAS the pet, and insert events in one transaction.
    * A version miss rolls everything back (`retry`). Already done is `conflict`.

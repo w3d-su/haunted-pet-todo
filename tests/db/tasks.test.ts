@@ -4,12 +4,18 @@
  */
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { postEpitaph } from "@/app/api/ai/epitaph/handlers";
 import { runDecayCron } from "@/app/api/cron/decay/handlers";
 import { getPet } from "@/app/api/pet/handlers";
 import { postTask } from "@/app/api/tasks/handlers";
 import { commitCompletion } from "@/lib/db/completion";
 import { appendEvent, listEvents } from "@/lib/db/events";
 import { getPetRecord, listPetUserIds, savePetState, setClockOffset } from "@/lib/db/pet";
+import {
+  deletePushSubscription,
+  listPushSubscriptions,
+  upsertPushSubscription,
+} from "@/lib/db/push";
 import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
 import type { Task } from "@/lib/game/tasks";
 import type { AppDeps, AuthedStores } from "@/lib/server/stores";
@@ -42,6 +48,12 @@ function pgStores(pool: Pool, now: number): { deps: AppDeps; stores: () => Promi
     },
     events: {
       appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),
+      listEvents: (id) => listEvents(supabase, id),
+    },
+    push: {
+      list: (id) => listPushSubscriptions(supabase, id),
+      upsert: (id, subscription) => upsertPushSubscription(supabase, id, subscription),
+      remove: (id, endpoint) => deletePushSubscription(supabase, id, endpoint),
     },
     commitCompletion: (input) => commitCompletion(supabase, input),
     setClockOffset: (id, shift) => setClockOffset(supabase, id, shift.clockOffsetMs, shift.clampTo),
@@ -71,7 +83,9 @@ describeDb("postgres task helpers, seq, and cron", () => {
   });
 
   async function empty(): Promise<void> {
-    await pool.query("truncate public.tasks, public.events, public.pet_state");
+    await pool.query(
+      "truncate public.tasks, public.events, public.pet_state, public.push_subscriptions",
+    );
   }
 
   it("maps a task to snake_case and hides soft-deleted rows", async () => {
@@ -168,13 +182,16 @@ describeDb("postgres task helpers, seq, and cron", () => {
     );
     expect(saved).not.toBeNull();
 
-    const denied = await runDecayCron(new Request("http://localhost/api/cron/decay"), {
+    const cronBase = {
       now: () => START + 2 * HOUR,
       newId: () => crypto.randomUUID(),
       secret: "db-cron",
       listUserIds: () => listPetUserIds(supabase),
       storesFor: () => stores(),
-    });
+      requestEpitaph: async () => undefined,
+      deliverPush: async () => undefined,
+    };
+    const denied = await runDecayCron(new Request("http://localhost/api/cron/decay"), cronBase);
     expect(denied.status).toBe(401);
     expect((await getPetRecord(supabase, USER_ID))?.state.hp).toBe(4);
 
@@ -183,11 +200,26 @@ describeDb("postgres task helpers, seq, and cron", () => {
         headers: { authorization: "Bearer db-cron" },
       }),
       {
-        now: () => START + 2 * HOUR,
-        newId: () => crypto.randomUUID(),
-        secret: "db-cron",
-        listUserIds: () => listPetUserIds(supabase),
-        storesFor: () => stores(),
+        ...cronBase,
+        requestEpitaph: async (userId) => {
+          const response = await postEpitaph(
+            request(
+              "POST",
+              "/api/ai/epitaph",
+              { userId },
+              { authorization: "Bearer db-cron" },
+            ),
+            {
+              ...deps,
+              now: () => START + 2 * HOUR,
+              cronSecret: "db-cron",
+              storesFor: () => stores(),
+              completeJson: async () => null,
+              allow: () => true,
+            },
+          );
+          if (!response.ok) throw new Error(`epitaph ${response.status}`);
+        },
       },
     );
     expect(ran.status).toBe(200);
@@ -195,14 +227,16 @@ describeDb("postgres task helpers, seq, and cron", () => {
     expect(body.processed).toBe(1);
     expect(body.deaths).toBe(1);
     const pet = await getPetRecord(supabase, USER_ID);
-    expect(pet?.state.status).toBe("dead");
+    expect(pet?.state.status).toBe("tombstone");
     expect(pet?.state.hp).toBe(0);
+    expect(pet?.state.currentEpitaph).toBe("Here lies a to-do list. It never stood a chance.");
     const tasks = await getTasks(supabase, USER_ID);
     expect(tasks[0]?.status).toBe("overdue");
     const timeline = await listEvents(supabase, USER_ID);
     const types = timeline.map((event) => event.eventType);
     expect(types).toContain("TASK_OVERDUE");
     expect(types).toContain("PET_DIED");
+    expect(types).toContain("EPITAPH_READY");
     const seqs = timeline.map((event) => event.seq);
     expect([...seqs].sort((left, right) => left - right)).toEqual(seqs);
   });

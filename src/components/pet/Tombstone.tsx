@@ -45,7 +45,9 @@ export function Tombstone({
           alt="Tombstone for a ghost pet"
         />
       </div>
-      <p className="mt-4 max-w-xs text-center text-[8px] leading-relaxed text-bone">{text}</p>
+      <p className="mt-4 max-w-xs whitespace-pre-line text-center text-[8px] leading-relaxed text-bone">
+        {text}
+      </p>
       {ready ? (
         <PixelButton className="mt-6" disabled={pending} onClick={onRebirth}>
           New Egg

@@ -9,6 +9,8 @@ import type {
   EventStore,
   PetSnapshot,
   PetStore,
+  PushStore,
+  PushSubscription,
   TaskStore,
 } from "@/lib/server/stores";
 
@@ -18,10 +20,15 @@ export interface StoredEvent {
   payload: Record<string, unknown>;
 }
 
+export interface StoredPush extends PushSubscription {
+  userId: string;
+}
+
 export interface MemoryWorld {
   tasks: Task[];
   pets: Map<string, PetSnapshot>;
   events: StoredEvent[];
+  pushes: StoredPush[];
   deps: (userId: string | null, now: number | (() => number), demoMode?: boolean) => AppDeps;
 }
 
@@ -42,6 +49,7 @@ export function createMemoryWorld(): MemoryWorld {
   const tasks: Task[] = [];
   const pets = new Map<string, PetSnapshot>();
   const events: StoredEvent[] = [];
+  const pushes: StoredPush[] = [];
 
   const petStore: PetStore = {
     async get(userId) {
@@ -112,6 +120,31 @@ export function createMemoryWorld(): MemoryWorld {
     async appendEvent(userId, eventType, payload) {
       events.push({ userId, eventType, payload });
     },
+    async listEvents(userId) {
+      return events
+        .filter((event) => event.userId === userId)
+        .map((event) => ({ eventType: event.eventType, payload: event.payload }));
+    },
+  };
+
+  const pushStore: PushStore = {
+    async list(userId) {
+      return pushes
+        .filter((row) => row.userId === userId)
+        .map((row) => ({ endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth }));
+    },
+    async upsert(userId, subscription) {
+      const index = pushes.findIndex(
+        (row) => row.userId === userId && row.endpoint === subscription.endpoint,
+      );
+      const stored: StoredPush = { userId, ...subscription };
+      if (index === -1) pushes.push(stored);
+      else pushes[index] = stored;
+    },
+    async remove(userId, endpoint) {
+      const index = pushes.findIndex((row) => row.userId === userId && row.endpoint === endpoint);
+      if (index >= 0) pushes.splice(index, 1);
+    },
   };
 
   function commitCompletion(input: CompletionCommit): Promise<CompletionResult> {
@@ -153,6 +186,7 @@ export function createMemoryWorld(): MemoryWorld {
     tasks,
     pets,
     events,
+    pushes,
     deps(userId, now, demoMode = false) {
       const clock = typeof now === "function" ? now : () => now;
       return {
@@ -166,6 +200,7 @@ export function createMemoryWorld(): MemoryWorld {
                 pets: petStore,
                 tasks: taskStore,
                 events: eventStore,
+                push: pushStore,
                 commitCompletion: (input) => commitCompletion(input),
                 async setClockOffset(id, shift) {
                   const existing = pets.get(id);

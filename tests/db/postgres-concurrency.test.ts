@@ -12,8 +12,13 @@ import { Pool } from "pg";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { getTasksRoute, patchTask, postTask } from "@/app/api/tasks/handlers";
 import { commitCompletion } from "@/lib/db/completion";
-import { appendEvent } from "@/lib/db/events";
+import { appendEvent, listEvents } from "@/lib/db/events";
 import { getPetRecord, savePetState, setClockOffset } from "@/lib/db/pet";
+import {
+  deletePushSubscription,
+  listPushSubscriptions,
+  upsertPushSubscription,
+} from "@/lib/db/push";
 import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
 import { SystemClock } from "@/lib/server/clock";
 import type { AppDeps } from "@/lib/server/stores";
@@ -63,6 +68,12 @@ function pgDeps(pool: Pool): AppDeps {
       },
       events: {
         appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),
+        listEvents: (id) => listEvents(supabase, id),
+      },
+      push: {
+        list: (id) => listPushSubscriptions(supabase, id),
+        upsert: (id, subscription) => upsertPushSubscription(supabase, id, subscription),
+        remove: (id, endpoint) => deletePushSubscription(supabase, id, endpoint),
       },
       commitCompletion: (input) => commitCompletion(supabase, input),
       setClockOffset: (id, shift) =>

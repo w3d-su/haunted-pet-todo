@@ -49,6 +49,8 @@ it("returns 409 when a done task is completed again and does not change the pet"
 
   const first = await patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps);
   expect(first.status).toBe(200);
+  const firstBody = (await first.json()) as { emitted: { type: string }[] };
+  expect(firstBody.emitted.map((event) => event.type)).toContain("PET_HATCHED");
   const petBefore = world.pets.get(USER_ID)?.state;
   expect(petBefore?.stage).toBe("hatchling");
 

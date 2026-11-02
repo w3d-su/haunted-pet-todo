@@ -6,6 +6,7 @@ import {
   STREAK_BREAK_HOURS,
   STREAK_BREAK_MOOD_PENALTY,
 } from "./constants";
+import { calendarDay, hourFromTimestamp } from "./evolution";
 import type { PetState } from "./pet";
 
 /** Pure linear decay: rate per hour × elapsed hours. */
@@ -64,4 +65,62 @@ export function decayStats(pet: PetState, now: number): PetState {
 /** Decay from `fromMs` to `toMs`, ignoring the pet's current `lastTickAt`. */
 export function decayRange(pet: PetState, fromMs: number, toMs: number): PetState {
   return decayStats({ ...pet, lastTickAt: fromMs }, toMs);
+}
+
+export interface HabitualEvent {
+  readonly eventType: string;
+  readonly payload: {
+    readonly completedAt?: unknown;
+    readonly at?: unknown;
+  };
+}
+
+function completionStamp(event: HabitualEvent): number | null {
+  if (event.eventType !== "TASK_COMPLETED") return null;
+  const value = event.payload.completedAt ?? event.payload.at;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Most common local hour (0–23) among the last 30 task completions.
+ * The lowest hour wins a tie. Returns null when nothing qualifies.
+ * `timeZone` is the pet's zone. This does not read the wall clock.
+ */
+export function computeHabitualHour(
+  events: readonly HabitualEvent[],
+  timeZone: string,
+): number | null {
+  const stamps = events
+    .map(completionStamp)
+    .filter((stamp): stamp is number => stamp !== null)
+    .slice(-30);
+  if (stamps.length === 0) return null;
+  const counts = new Array<number>(24).fill(0);
+  for (const stamp of stamps) {
+    const hour = hourFromTimestamp(stamp, timeZone);
+    counts[hour] = (counts[hour] ?? 0) + 1;
+  }
+  let bestHour = 0;
+  let bestCount = -1;
+  for (let hour = 0; hour < 24; hour += 1) {
+    const count = counts[hour] ?? 0;
+    if (count > bestCount) {
+      bestHour = hour;
+      bestCount = count;
+    }
+  }
+  return bestHour;
+}
+
+/** True when a task completion falls on the same local calendar day as `now`. */
+export function hasCompletionToday(
+  events: readonly HabitualEvent[],
+  now: number,
+  timeZone: string,
+): boolean {
+  const today = calendarDay(now, timeZone);
+  return events.some((event) => {
+    const stamp = completionStamp(event);
+    return stamp !== null && calendarDay(stamp, timeZone) === today;
+  });
 }

@@ -1,6 +1,11 @@
 import { commitCompletion } from "@/lib/db/completion";
-import { appendEvent } from "@/lib/db/events";
+import { appendEvent, listEvents } from "@/lib/db/events";
 import { getPetRecord, savePetState, setClockOffset } from "@/lib/db/pet";
+import {
+  deletePushSubscription,
+  listPushSubscriptions,
+  upsertPushSubscription,
+} from "@/lib/db/push";
 import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
 import { bearerToken, createServiceClient, createUserClient } from "@/lib/db/client";
 import { userIdFromAccessToken } from "@/lib/db/auth";
@@ -28,6 +33,12 @@ function serviceStores(userId: string): AuthedStores {
     },
     events: {
       appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
+      listEvents: (id) => listEvents(writer, id),
+    },
+    push: {
+      list: (id) => listPushSubscriptions(writer, id),
+      upsert: (id, subscription) => upsertPushSubscription(writer, id, subscription),
+      remove: (id, endpoint) => deletePushSubscription(writer, id, endpoint),
     },
     commitCompletion: (input) => commitCompletion(writer, input),
     setClockOffset: (id, shift) =>
@@ -63,6 +74,12 @@ export function productionDeps(): AppDeps {
           },
           events: {
             appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
+            listEvents: (id) => listEvents(reader, id),
+          },
+          push: {
+            list: (id) => listPushSubscriptions(reader, id),
+            upsert: (id, subscription) => upsertPushSubscription(writer, id, subscription),
+            remove: (id, endpoint) => deletePushSubscription(writer, id, endpoint),
           },
           commitCompletion: (input) => commitCompletion(writer, input),
           setClockOffset: (id, shift) =>

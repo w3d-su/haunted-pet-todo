@@ -30,7 +30,7 @@ function spriteFor(pet: PetState): { src: string; size: string; alt: string } {
   };
 }
 
-export function PetSprite({ pet }: { pet: PetState }) {
+export function PetSprite({ pet, evolving = false }: { pet: PetState; evolving?: boolean }) {
   const reduced = useReducedMotion() === true;
   const sprite = spriteFor(pet);
   const previousHp = useRef(pet.hp);
@@ -47,7 +47,7 @@ export function PetSprite({ pet }: { pet: PetState }) {
   }, [pet.hp, pet.status, reduced]);
 
   return (
-    <div className="relative inline-block">
+    <div className={`relative inline-block ${evolving ? "pet-evolving" : ""}`}>
       <motion.img
         className={`pixel-art ${sprite.size}`}
         src={sprite.src}

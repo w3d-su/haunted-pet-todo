@@ -13,11 +13,14 @@ interface GameValue {
   loading: boolean;
   pending: boolean;
   error: string | null;
+  evolving: boolean;
+  breakdownLine: string | null;
   refresh: () => Promise<void>;
   createTask: (draft: TaskDraft) => Promise<void>;
   completeTask: (id: string) => Promise<void>;
   reorder: (orderedIds: readonly string[]) => Promise<void>;
   rebirth: () => Promise<void>;
+  requestBreakdown: (id: string) => Promise<void>;
 }
 
 const GameContext = createContext<GameValue | null>(null);
@@ -34,6 +37,21 @@ function markDone(tasks: readonly TaskView[], id: string): TaskView[] {
     status: task.id === id ? "done" : task.status,
     subtasks: markDone(task.subtasks, id),
   }));
+}
+
+function vapidPublicKey(): string | null {
+  const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  if (!key || key === "your-vapid-public-key") return null;
+  return key;
+}
+
+function urlBase64ToUint8Array(value: string): Uint8Array {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) output[index] = raw.charCodeAt(index);
+  return output;
 }
 
 function supabaseConfigured(): boolean {
@@ -75,7 +93,10 @@ export function GameStateProvider({
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evolving, setEvolving] = useState(false);
+  const [breakdownLine, setBreakdownLine] = useState<string | null>(null);
   const headersRef = useRef<Record<string, string>>({});
+  const evolveTimer = useRef<number | null>(null);
 
   async function authed(path: string, init?: RequestInit): Promise<Response> {
     const headers = new Headers(init?.headers);
@@ -99,10 +120,29 @@ export function GameStateProvider({
       clockOffsetMs: number;
     };
     const taskBody = (await taskResponse.json()) as { tasks: TaskView[]; now: number };
-    setPet(petBody.pet);
+    let nextPet = petBody.pet;
+    if (nextPet.status === "dead") {
+      try {
+        const epitaph = await authed("/api/ai/epitaph", { method: "POST", body: "{}" });
+        if (epitaph.ok) {
+          const carved = (await epitaph.json()) as { pet?: PetState };
+          if (carved.pet) nextPet = carved.pet;
+        }
+      } catch {
+        // The tombstone still shows the fallback line baked in at death.
+      }
+    }
+    setPet(nextPet);
     setNow(petBody.now);
     setClockOffsetMs(petBody.clockOffsetMs);
     setTasks(taskBody.tasks);
+  }
+
+  function noticeEvolution(emitted: readonly { type?: string }[] | undefined) {
+    if (!emitted?.some((event) => event.type === "PET_EVOLVED")) return;
+    setEvolving(true);
+    if (evolveTimer.current !== null) window.clearTimeout(evolveTimer.current);
+    evolveTimer.current = window.setTimeout(() => setEvolving(false), 900);
   }
 
   useEffect(() => {
@@ -129,10 +169,47 @@ export function GameStateProvider({
     void boot();
     return () => {
       cancelled = true;
+      if (evolveTimer.current !== null) window.clearTimeout(evolveTimer.current);
     };
     // Boot once. Later writes call refresh themselves.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoMode]);
+
+  useEffect(() => {
+    if (loading || error) return;
+    const key = vapidPublicKey();
+    if (!key || typeof Notification === "undefined" || !("serviceWorker" in navigator)) return;
+    let cancelled = false;
+    async function subscribe() {
+      try {
+        const permission = await Notification.requestPermission();
+        if (cancelled || permission !== "granted" || !key) return;
+        const registration = await navigator.serviceWorker.register("/sw.js");
+        const existing = await registration.pushManager.getSubscription();
+        const subscription =
+          existing ??
+          (await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
+          }));
+        if (cancelled) return;
+        await authed("/api/push", {
+          method: "POST",
+          body: JSON.stringify(subscription),
+        });
+      } catch (cause) {
+        console.error(cause);
+      }
+    }
+    function onGesture() {
+      void subscribe();
+    }
+    window.addEventListener("pointerdown", onGesture, { once: true });
+    return () => {
+      cancelled = true;
+      window.removeEventListener("pointerdown", onGesture);
+    };
+  }, [loading, error]);
 
   async function run(action: () => Promise<void>) {
     setPending(true);
@@ -154,6 +231,8 @@ export function GameStateProvider({
     loading,
     pending,
     error,
+    evolving,
+    breakdownLine,
     refresh: () => run(refresh),
     createTask: (draft) =>
       run(async () => {
@@ -172,6 +251,8 @@ export function GameStateProvider({
           body: JSON.stringify({ id, status: "done" }),
         });
         if (!response.ok) throw new Error("That task would not close.");
+        const body = (await response.json()) as { emitted?: { type: string }[] };
+        noticeEvolution(body.emitted);
         await refresh();
       }),
     reorder: (orderedIds) =>
@@ -195,6 +276,17 @@ export function GameStateProvider({
         });
         if (!response.ok) throw new Error("The egg is not ready.");
         await refresh();
+      }),
+    requestBreakdown: (id) =>
+      run(async () => {
+        const response = await authed("/api/ai/breakdown", {
+          method: "POST",
+          body: JSON.stringify({ taskId: id }),
+        });
+        if (!response.ok) throw new Error("The ghost could not break that down.");
+        const body = (await response.json()) as { intro?: string };
+        await refresh();
+        setBreakdownLine(body.intro ?? null);
       }),
   };
 
