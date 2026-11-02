@@ -7,14 +7,15 @@ inclusion: always
 ## Directory Layout
 
 ```
-haunted-pet-todo-kiro/
+haunted-pet-todo/
 ├── .kiro/
 │   ├── steering/
 │   │   ├── product.md
 │   │   ├── tech.md
 │   │   ├── structure.md
 │   │   ├── pet-voice.md
-│   │   └── visual-style.md
+│   │   ├── visual-style.md
+│   │   └── build-order.md
 │   └── hooks/
 │       ├── run-game-tests.json
 │       ├── visual-style-check.json
@@ -51,7 +52,7 @@ haunted-pet-todo-kiro/
 │   │   └── api/
 │   │       ├── cron/
 │   │       │   └── decay/
-│   │       │       └── route.ts    # Vercel Cron hourly decay
+│   │       │       └── route.ts    # daily decay backstop (Hobby cron)
 │   │       ├── tasks/
 │   │       │   └── route.ts        # CRUD for tasks
 │   │       ├── pet/
@@ -89,13 +90,13 @@ haunted-pet-todo-kiro/
 │   │   │   ├── StatBar.tsx
 │   │   │   ├── Toast.tsx
 │   │   │   ├── MuteToggle.tsx
-│   │   │   └── DemoControls.tsx    # only rendered when NEXT_PUBLIC_DEMO_MODE=true
+│   │   │   └── DemoControls.tsx    # only when server DEMO_MODE=true
 │   │   └── providers/
 │   │       ├── SoundProvider.tsx   # manages AudioContext, mute state
 │   │       └── GameStateProvider.tsx # Supabase real-time + client cache
 │   └── lib/
 │       ├── game/                   # PURE FUNCTIONS ONLY — no React, no I/O
-│       │   ├── clock.ts            # Clock interface + SystemClock + OffsetClock
+│       │   ├── clock.ts            # Clock interface + OffsetClock (no wall clock)
 │       │   ├── constants.ts        # MAX_HP, DECAY_RATES, ZOMBIE_DRAIN, thresholds
 │       │   ├── events.ts           # GameEvent discriminated union + append helpers (pure)
 │       │   ├── pet.ts              # PetState type, PetStage, PetStatus, initialPetState, rebirthPet, applyPetEvent
@@ -108,6 +109,8 @@ haunted-pet-todo-kiro/
 │       │   ├── breakdown.ts        # buildBreakdownPrompt(task) → string
 │       │   ├── nag.ts              # buildNagPrompt(pet, tasks, level) → string
 │       │   └── schemas.ts          # Zod schemas for LLM response shapes
+│       ├── server/
+│       │   └── clock.ts            # SystemClock, the one wall-clock call site
 │       ├── db/
 │       │   ├── client.ts           # Supabase client (server + browser exports)
 │       │   ├── tasks.ts            # DB helpers: getTasks, upsertTask, etc.
@@ -154,7 +157,7 @@ haunted-pet-todo-kiro/
 | DB migration files | `NNNN_<description>.sql` | `0001_init.sql` |
 | Sprite files | `<stage>_<state>.png` | `adult_hungry.png` |
 | Sound effect files | `<event>.ogg` | `task_complete.ogg` |
-| Env vars (public) | `NEXT_PUBLIC_<SCREAMING_SNAKE>` | `NEXT_PUBLIC_DEMO_MODE` |
+| Env vars (public) | `NEXT_PUBLIC_<SCREAMING_SNAKE>` | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` |
 | Env vars (server) | `SCREAMING_SNAKE_CASE` | `OPENAI_API_KEY` |
 | CSS custom properties | `--hp-color`, `--pet-sprite-size` | kebab-case with semantic prefix |
 | Constants | `SCREAMING_SNAKE_CASE` in `constants.ts` | `MAX_HP`, `DECAY_RATE_HP` |

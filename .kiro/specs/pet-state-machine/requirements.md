@@ -74,7 +74,7 @@ _User Story_: As a user with a long completion streak, I want my pet to evolve i
 - 4.2: WHEN evolution is triggered AND the majority of the last 10 completed tasks were completed between 22:00–05:59 local time, THEN the system SHALL set `PetState.stage` to `"adult_night_owl"`.
 - 4.3: WHEN evolution is triggered AND the majority of the last 10 completed tasks were completed between 05:00–10:59 local time, THEN the system SHALL set `PetState.stage` to `"adult_early_bird"`.
 - 4.4: WHEN evolution is triggered AND the majority of the last 10 completed tasks had `category = "study"` OR `category = "work"`, THEN the system SHALL set `PetState.stage` to `"adult_scholar"`.
-- 4.5: WHEN evolution is triggered AND none of criteria 4.2–4.4 match (or the pattern is ambiguous), THEN the system SHALL set `PetState.stage` to `"adult_haunter"` as the default evolved form.
+- 4.5: WHEN evolution is triggered AND none of criteria 4.2–4.4 match (or the pattern is a tie, or there is no history), THEN the system SHALL set `PetState.stage` to `"adult_haunter"`. Majority means a strict majority: `floor(n / 2) + 1`. `n === 0` is haunter. A 5–5 split is not a majority.
 - 4.6: WHEN `PetState.stage` changes to any evolved form, THEN the system SHALL emit a `PET_EVOLVED` event containing the new stage.
 - 4.7: IF multiple evolution criteria are met simultaneously, THEN the system SHALL apply the first matching rule in priority order: `night_owl` > `early_bird` > `scholar` > `haunter`.
 
@@ -173,8 +173,8 @@ _User Story_: As a developer, I want all pet state changes to flow through a sin
 
 **Acceptance Criteria**:
 
-- 13.1: WHEN `applyPetEvent(state, event, now)` is called, THEN the system SHALL return a new `PetState` without mutating the input `state`.
-- 13.2: WHEN `applyPetEvent` is called with the same `state`, `event`, and `now`, THEN the system SHALL return an equal output (deterministic).
+- 13.1: WHEN `applyPetEvent(state, event, now)` is called, THEN the system SHALL return `{ state, emitted }` without mutating the input. `emitted` holds consequence events (`PET_HATCHED`, `PET_GREW_UP`, `PET_EVOLVED`, `PET_DIED`, `STREAK_BROKEN`). The client does not decide evolution.
+- 13.2: WHEN `applyPetEvent` is called with the same `state`, `event`, and `now`, THEN the system SHALL return an equal output (deterministic). Ids that would otherwise be random (`pet id`, `tombstoneId`) are inputs, not generated inside the reducer.
 - 13.3: WHEN `applyPetEvent` is called, THEN the system SHALL NOT call `Date.now()` or `new Date()` internally.
 - 13.4: WHEN `applyPetEvent` receives an unrecognized event type, THEN the system SHALL return `state` unchanged.
 - 13.5: WHERE the pet status is `"tombstone"`, WHEN `applyPetEvent` is called with any event other than `REBIRTH` or `EPITAPH_READY`, THEN the system SHALL return `state` unchanged.

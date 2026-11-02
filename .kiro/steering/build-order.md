@@ -16,7 +16,7 @@ This file defines the single authoritative execution order for a coding agent wo
 |---|---|---|
 | 1 | pet-state-machine/tasks.md task 1 | Project scaffold, tooling, `.env.example`, `vercel.json` skeleton |
 | 2 | pet-state-machine/tasks.md task 2 | `src/lib/game/constants.ts` |
-| 3 | decay-and-time-travel/tasks.md task 1 | `src/lib/game/clock.ts` (`Clock`, `SystemClock`, `OffsetClock`) |
+| 3 | decay-and-time-travel/tasks.md task 1 | `src/lib/game/clock.ts` (`Clock`, `OffsetClock`); `SystemClock` in `src/lib/server/clock.ts` |
 | 4 | pet-state-machine/tasks.md task 3 | _(dependency note — no code, clock.ts already done)_ |
 | 5 | pet-state-machine/tasks.md task 4 | `src/lib/game/events.ts` (`GameEvent` union) |
 | 6 | pet-state-machine/tasks.md task 5 | `src/lib/game/pet.ts` (`PetState`, `PetStage`, `PetStatus`, `initialPetState`, `rebirthPet`) |
@@ -49,7 +49,7 @@ This file defines the single authoritative execution order for a coding agent wo
 | Order | Spec / Task | What it creates |
 |---|---|---|
 | 1 | decay-and-time-travel/tasks.md task 6 | `src/app/api/cron/decay/route.ts` (full cron handler — decay + zombie drain + epitaph trigger) |
-| 2 | decay-and-time-travel/tasks.md task 7 | `vercel.json` cron schedule entry |
+| 2 | decay-and-time-travel/tasks.md task 7 | `vercel.json` daily cron (`0 8 * * *`). Hobby cannot run an hourly cron. Schedule landed with the Week 1 skeleton. |
 | 3 | task-lifecycle/tasks.md task 12 | Extend `src/app/api/cron/decay/route.ts` with overdue-task check and `TASK_OVERDUE` events |
 | 4 | decay-and-time-travel/tasks.md task 8 | `src/app/api/demo/fast-forward/route.ts` |
 | 5 | pet-state-machine/tasks.md task 12 | `src/app/api/pet/route.ts` |

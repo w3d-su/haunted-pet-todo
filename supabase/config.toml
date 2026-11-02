@@ -1,0 +1,8 @@
+# Local Auth setting. `supabase init` owns the rest of this file; keep this
+# flag if you regenerate it. Hosted projects turn the same switch on in the
+# dashboard (Authentication → Sign In / Providers → Anonymous Sign-Ins).
+# A SQL migration cannot enable an Auth provider.
+project_id = "haunted-pet-todo"
+
+[auth]
+enable_anonymous_sign_ins = true

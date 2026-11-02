@@ -15,14 +15,14 @@ The Vercel Cron job calls the same pure functions as the fast-forward demo route
 ```mermaid
 flowchart TD
     subgraph "src/lib/game/ (pure)"
-        CL[clock.ts\nClock · SystemClock · OffsetClock]
+        CL[clock.ts\nClock · OffsetClock]
         DC[decay.ts\ndecayStats · decayAmount]
         PE[pet.ts\napplyPetEvent DECAY_TICK branch]
         CO[constants.ts\nDECAY_RATE_* · STREAK_BREAK_HOURS]
     end
 
     subgraph "src/app/api/"
-        CRON[cron/decay/route.ts\nhourly Vercel Cron]
+        CRON[cron/decay/route.ts\ndaily backstop cron]
         FF[demo/fast-forward/route.ts\ndemo-only fast-forward]
         PUSH[push/route.ts\npush subscription + send]
     end
@@ -33,7 +33,7 @@ flowchart TD
     end
 
     subgraph "src/components/ui/"
-        DC_UI[DemoControls.tsx\n(NEXT_PUBLIC_DEMO_MODE only)]
+        DC_UI[DemoControls.tsx\nserver DEMO_MODE only]
     end
 
     CRON -->|decayStats(pet, now)| DC
@@ -60,18 +60,8 @@ export interface Clock {
 }
 
 /**
- * Production clock. Only used in API route handlers — never imported
- * by src/lib/game/ pure functions themselves.
- */
-export class SystemClock implements Clock {
-  now(): number {
-    return Date.now();
-  }
-}
-
-/**
  * Deterministic clock for tests and demo fast-forward.
- * base: a fixed Unix ms start point (e.g. Date.now() at server start).
+ * base: a fixed Unix ms start point supplied by the caller.
  * offsetMs: mutable advance; increased by advance().
  */
 export class OffsetClock implements Clock {
@@ -97,6 +87,22 @@ export class OffsetClock implements Clock {
   get offset(): number {
     return this.offsetMs;
   }
+}
+```
+
+`SystemClock` is **not** in this file. It lives in `src/lib/server/clock.ts` and is the only wall-clock call site. `src/lib/game/` must not call `Date.now()` or `new Date()` (enforced by ESLint `no-restricted-syntax` and the `no-date-now-guard` hook).
+
+```ts
+// src/lib/server/clock.ts
+export class SystemClock implements Clock {
+  now(): number {
+    return Date.now();
+  }
+}
+
+/** Effective game time. Fast-forward changes the offset, not lastTickAt. */
+export function effectiveNow(systemNow: number, clockOffsetMs: number): number {
+  return systemNow + clockOffsetMs;
 }
 ```
 
@@ -153,25 +159,25 @@ export function decayStats(pet: PetState, now: number): PetState {
   // Streak break check
   let newStreak = pet.currentStreak;
   const streakBreakMs = STREAK_BREAK_HOURS * 3_600_000;
-  const timeSinceCompletion =
-    pet.lastCompletionAt !== null ? now - pet.lastCompletionAt : elapsedMs;
   const streakBroken =
-    newStreak > 0 && timeSinceCompletion > streakBreakMs;
+    pet.lastCompletionAt !== null &&
+    newStreak > 0 &&
+    now - pet.lastCompletionAt > streakBreakMs;
 
   if (streakBroken) {
     newStreak = 0;
     newMood = Math.max(0, newMood - STREAK_BREAK_MOOD_PENALTY);
   }
 
-  const isDead = newHp === 0 && pet.status === "alive";
-
+  // Do not flip status here. A dead pet short-circuits the next call, so a
+  // split interval would drop hunger/mood that one combined call still applies.
+  // applyPetEvent sets status to "dead" when the returned hp is 0.
   return {
     ...pet,
     hp: newHp,
     hunger: newHunger,
     mood: newMood,
     currentStreak: newStreak,
-    status: isDead ? "dead" : pet.status,
     lastTickAt: now,
   };
 }
@@ -191,7 +197,7 @@ export function decayRange(pet: PetState, fromMs: number, toMs: number): PetStat
 
 ```ts
 import { NextRequest, NextResponse } from "next/server";
-import { SystemClock } from "@/lib/game/clock";
+import { SystemClock } from "@/lib/server/clock";
 import { decayStats } from "@/lib/game/decay";
 import { applyPetEvent } from "@/lib/game/pet";
 import { activeZombies, makeZombieDrainEvent } from "@/lib/game/zombies";
@@ -224,13 +230,11 @@ const FastForwardBodySchema = z.union([
 ]);
 
 export async function POST(request: Request): Promise<Response> {
-  // 1. Check NEXT_PUBLIC_DEMO_MODE === "true" → 403 if not
+  // 1. Require a signed-in user. 403 unless server env DEMO_MODE === "true"
   // 2. Parse body with FastForwardBodySchema → 400 if invalid
-  // 3. If reset: reset stored clock offset
-  // 4. If hours N:
-  //    For each tick (1..N):
-  //      advance clock by 1h
-  //      run the same decay + zombie drain logic as the cron job
+  // 3. If reset: set this user's clock_offset_ms to 0
+  // 4. If hours N: add N hours to clock_offset_ms, then catch up once
+  //    with effectiveNow (do not write lastTickAt past that time)
   // 5. Return updated pet state
 }
 ```
@@ -240,10 +244,10 @@ export async function POST(request: Request): Promise<Response> {
 ```ts
 /** Returns VAPID keys from environment variables. Server-only. */
 export function getVapidKeys(): { publicKey: string; privateKey: string } {
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
   const privateKey = process.env.VAPID_PRIVATE_KEY;
   if (!publicKey || !privateKey) {
-    throw new Error("VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set");
+    throw new Error("NEXT_PUBLIC_VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY must be set");
   }
   return { publicKey, privateKey };
 }
@@ -294,7 +298,7 @@ RLS: SELECT/INSERT/DELETE for `auth.uid() = user_id`. No UPDATE (delete + re-ins
 
 ### Clock Offset Storage (server-side singleton for demo mode)
 
-In demo mode the clock offset is stored in a module-level singleton in the API route process (reset on cold start). For a more durable demo, it could be stored in a Supabase `demo_state` table. The module singleton is sufficient for hackathon demos.
+Per-user `pet_state.clock_offset_ms` (bigint, default 0). Every read/write and the daily cron use `effectiveNow = SystemClock.now() + clock_offset_ms`. Fast-forward updates that column (auth required, `DEMO_MODE=true`). It must not write `last_tick_at` ahead of the effective clock: `decayStats` treats `now < lastTickAt` as a no-op, so a future `lastTickAt` would stall catch-up. A module singleton does not survive serverless isolates.
 
 ---
 
@@ -409,5 +413,5 @@ See Properties P18–P26 above.
 
 ### Integration Tests
 - Cron handler returns 401 for missing `CRON_SECRET`.
-- Fast-forward handler returns 403 when `NEXT_PUBLIC_DEMO_MODE !== "true"`.
+- Fast-forward handler returns 403 when server `DEMO_MODE !== "true"` or the caller is signed out.
 - Fast-forward handler returns 400 for invalid `hours` value.

@@ -92,7 +92,7 @@ _User Story_: As a user with overdue tasks, I want zombies to drain my pet's HP 
 
 **Acceptance Criteria**:
 
-- 6.1: WHEN the hourly cron tick runs AND there are N active zombies, THEN the system SHALL apply a `ZOMBIE_DRAIN` event to the pet reducing HP by `N × ZOMBIE_DRAIN_PER_HOUR`.
+- 6.1: WHEN time passes with active zombies, THEN the system SHALL drain HP by `ZOMBIE_DRAIN_PER_HOUR` per zombie per hour, counting only the hours that task was actually overdue. Read/write catch-up does this; the daily cron is the backstop.
 - 6.2: WHEN `ZOMBIE_DRAIN` is applied AND `PetState.hp` would drop to 0, THEN the system SHALL set `PetState.status = "dead"` (handled by `applyPetEvent`).
 - 6.3: WHEN `PetState.status` is `"dead"` or `"tombstone"`, THEN the system SHALL NOT apply zombie drain (no further damage).
 

@@ -88,7 +88,7 @@ The canonical stage names used everywhere in code, database, and UI:
 - **Public repo**: OSI-approved open-source license (MIT) in root LICENSE file.
 - **Committed .kiro/**: the `.kiro/` directory (steering, hooks, specs) must be committed and visible in the public repo — it is part of the judging submission.
 - **3-minute demo**: the demo video must fit in 3 minutes. Prioritize the core loop (create task → pet reacts → overdue → zombie → death → epitaph → rebirth) over stretch features.
-- **Fast-forward demo control**: a `DemoControls` component (visible only when `NEXT_PUBLIC_DEMO_MODE=true`) must let the demo presenter advance the in-game clock by 1 h, 6 h, or 24 h instantly. This must call the same pure game-logic functions as the real cron job.
+- **Fast-forward demo control**: `DemoControls` is shown only when the server env `DEMO_MODE=true`. It advances that user's `clock_offset_ms` by 1 h, 6 h, or 24 h and then runs the same catch-up as a normal read. The client cannot turn this on with a public env var.
 
 ## "Done" Criteria for Judging
 

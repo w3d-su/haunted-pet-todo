@@ -22,7 +22,7 @@ flowchart TD
     subgraph "src/app/api/"
         TR[tasks/route.ts\nCRUD + overdue check]
         BD[ai/breakdown/route.ts\nLLM subtask breakdown]
-        CRON[cron/decay/route.ts\nhourly overdue + zombie drain]
+        CRON[cron/decay/route.ts\ndaily backstop + catch-up]
     end
 
     subgraph "src/lib/game/ (pure)"
@@ -359,7 +359,7 @@ For any `Task` with `status = "done"`, `activeZombies([task], now).length === 0`
 - Validates: Requirement 5.3
 
 **Property P13 — Task completion never lowers pet HP**
-For any alive `PetState p` and any `TASK_COMPLETED` event, `applyPetEvent(p, event, now).hp >= p.hp`.
+For any alive `PetState p` and any `TASK_COMPLETED` event, `applyPetEvent(p, event, now).state.hp >= p.hp`.
 - Generators: `arbAlivePetState`, `arbTaskCompletedEvent`
 - Validates: Requirements 7.2, 8.2
 
