@@ -44,7 +44,22 @@ it("rejects a resolved private address before the push agent connects", () => {
   expect(addressIsBlocked("fe80::1")).toBe(true);
   expect(addressIsBlocked("fc00::1")).toBe(true);
   expect(addressIsBlocked("::ffff:127.0.0.1")).toBe(true);
+  expect(addressIsBlocked("100.64.0.1")).toBe(true);
+  expect(addressIsBlocked("100.127.255.1")).toBe(true);
+  expect(addressIsBlocked("198.18.0.1")).toBe(true);
+  expect(addressIsBlocked("198.19.255.1")).toBe(true);
+  expect(addressIsBlocked("224.0.0.1")).toBe(true);
+  expect(addressIsBlocked("240.0.0.1")).toBe(true);
+  expect(addressIsBlocked("255.255.255.255")).toBe(true);
+  expect(addressIsBlocked("64:ff9b::1")).toBe(true);
+  expect(addressIsBlocked("64:ff9b::8.8.8.8")).toBe(true);
+  expect(addressIsBlocked("2002::1")).toBe(true);
+  expect(addressIsBlocked("::127.0.0.1")).toBe(true);
+  expect(addressIsBlocked("::7f00:1")).toBe(true);
   expect(addressIsBlocked("8.8.8.8")).toBe(false);
+  expect(addressIsBlocked("1.1.1.1")).toBe(false);
+  expect(addressIsBlocked("100.128.0.1")).toBe(false);
+  expect(addressIsBlocked("2001:4860:4860::8888")).toBe(false);
 
   const lookup = createPushLookup(((
     _hostname: string,

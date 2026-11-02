@@ -1,5 +1,10 @@
 -- Daily nag marker and model-call counters. Authenticated users cannot write.
 -- The service role calls the functions. A push insert past five rows per user fails.
+--
+-- This file was edited in place after it first landed on the Week 3 branch.
+-- It is not on main yet. If a local database already applied an earlier copy
+-- of 0005, reset it before relying on the advisory lock or search_path:
+--   supabase db reset
 
 create table public.user_nag (
   user_id uuid primary key references auth.users (id) on delete cascade,

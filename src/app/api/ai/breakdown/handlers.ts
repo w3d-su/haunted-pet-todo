@@ -94,6 +94,9 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
         task: claimed,
       });
     } catch (error) {
+      // A failure before any subtask row exists releases the claim so the
+      // player can ask again. Once a subtask is written the claim stays:
+      // the next request returns those rows instead of starting a second set.
       if (created.length === 0) {
         try {
           await stores.tasks.releaseBreakdown(task.id, stores.userId);

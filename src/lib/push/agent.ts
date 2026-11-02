@@ -9,10 +9,18 @@ blocked.addSubnet("127.0.0.0", 8, "ipv4");
 blocked.addSubnet("169.254.0.0", 16, "ipv4");
 blocked.addSubnet("172.16.0.0", 12, "ipv4");
 blocked.addSubnet("192.168.0.0", 16, "ipv4");
+blocked.addSubnet("100.64.0.0", 10, "ipv4");
+blocked.addSubnet("198.18.0.0", 15, "ipv4");
+blocked.addSubnet("224.0.0.0", 4, "ipv4");
+blocked.addSubnet("240.0.0.0", 4, "ipv4");
+blocked.addAddress("255.255.255.255", "ipv4");
 blocked.addAddress("::", "ipv6");
 blocked.addAddress("::1", "ipv6");
 blocked.addSubnet("fe80::", 10, "ipv6");
 blocked.addSubnet("fc00::", 7, "ipv6");
+blocked.addSubnet("64:ff9b::", 96, "ipv6");
+blocked.addSubnet("2002::", 16, "ipv6");
+blocked.addSubnet("::", 96, "ipv6");
 
 function mappedIpv4(address: string): string | null {
   const lower = address.toLowerCase();
@@ -29,7 +37,11 @@ function mappedIpv4(address: string): string | null {
   return `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
 }
 
-/** Private, loopback, link-local, and unspecified addresses, including IPv4-mapped IPv6. */
+/**
+ * Not a public unicast address. Covers private, CGNAT, benchmarking,
+ * multicast, reserved, loopback, link-local, unspecified, NAT64, 6to4,
+ * IPv4-compatible (`::/96`, including `::127.0.0.1`), and IPv4-mapped IPv6.
+ */
 export function addressIsBlocked(address: string): boolean {
   const mapped = mappedIpv4(address);
   if (mapped) return blocked.check(mapped, "ipv4");
