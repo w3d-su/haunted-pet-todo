@@ -9,16 +9,23 @@ import {
   DEMO_USER_CAP,
   demoWorldForSession,
   dropDemoUser,
+  guardDemoTask,
   memoryDemoAllowed,
   retainDemoUser,
   signDemoUser,
+  verifyDemoUser,
   type DemoTouch,
 } from "@/lib/server/demo-store";
 import { createMemoryWorld } from "@/lib/server/memory";
 import { productionDeps } from "@/lib/server/production";
 import { request, USER_ID } from "../helpers/world";
 
-const envKeys = ["DEMO_MODE", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const;
+const envKeys = [
+  "DEMO_MODE",
+  "DEMO_COOKIE_SECRET",
+  "NEXT_PUBLIC_SUPABASE_URL",
+  "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+] as const;
 
 function withEnv(values: Partial<Record<(typeof envKeys)[number], string | undefined>>, run: () => Promise<void>) {
   const previous = new Map(envKeys.map((key) => [key, process.env[key]]));
@@ -144,12 +151,19 @@ it("refuses a new demo user when the cap is full and keeps the ones already in",
   expect([...world.pets.keys()].sort()).toEqual(ids);
 });
 
-it("sets Secure only for https or production", async () => {
+it("sets Secure only when the request is https", async () => {
   await withEnv({ DEMO_MODE: "true" }, async () => {
     const plain = await postDemoSession(
       new Request("http://192.168.1.20/api/demo/session", { method: "POST" }),
     );
     expect(plain.headers.get("set-cookie")).not.toMatch(/Secure/);
+    const forwarded = await postDemoSession(
+      new Request("http://192.168.1.20/api/demo/session", {
+        method: "POST",
+        headers: { "x-forwarded-proto": "https" },
+      }),
+    );
+    expect(forwarded.headers.get("set-cookie")).toMatch(/Secure/);
     const https = await postDemoSession(
       new Request("https://demo.example/api/demo/session", { method: "POST" }),
     );
@@ -163,7 +177,7 @@ it("sets Secure only for https or production", async () => {
       const production = await postDemoSession(
         new Request("http://192.168.1.20/api/demo/session", { method: "POST" }),
       );
-      expect(production.headers.get("set-cookie")).toMatch(/Secure/);
+      expect(production.headers.get("set-cookie")).not.toMatch(/Secure/);
     });
   } finally {
     env.NODE_ENV = previous;
@@ -227,9 +241,48 @@ it("stops a demo user at the task cap", async () => {
       request("POST", "/api/tasks", { title: "One too many" }, headers),
       deps,
     );
-    expect(overflow.status).toBe(409);
+    expect(overflow.status).toBe(429);
+    const body = (await overflow.json()) as { error?: string };
+    expect(body.error).toMatch(/limited number of tasks/);
     expect(demoWorldForSession().tasks.filter((task) => task.deletedAt === null)).toHaveLength(
       DEMO_TASK_CAP,
     );
   });
+});
+
+it("ignores the published demo cookie placeholder and done tasks", async () => {
+  await withEnv({ DEMO_MODE: "true", DEMO_COOKIE_SECRET: "your-demo-cookie-secret" }, async () => {
+    const signed = signDemoUser(USER_ID);
+    expect(verifyDemoUser(signed, Buffer.from("your-demo-cookie-secret"))).toBeNull();
+  });
+  await withEnv({ DEMO_MODE: "true", DEMO_COOKIE_SECRET: "a-real-local-secret" }, async () => {
+    const signed = signDemoUser(USER_ID);
+    expect(verifyDemoUser(signed, Buffer.from("a-real-local-secret"))).toBe(USER_ID);
+  });
+
+  const world = createMemoryWorld();
+  const done = initialPetState(USER_ID, 1_000, crypto.randomUUID(), "UTC");
+  void done;
+  for (let index = 0; index < 5; index += 1) {
+    world.tasks.push({
+      id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+      userId: USER_ID,
+      title: "Done",
+      notes: null,
+      category: "chores",
+      size: "small",
+      status: "done",
+      dueAt: null,
+      completedAt: 1_000,
+      deletedAt: null,
+      parentId: null,
+      breakdownSuggested: false,
+      allSubtasksDone: false,
+      sortOrder: index,
+      createdAt: 1_000,
+    });
+  }
+  expect(() =>
+    guardDemoTask(world, { id: "00000000-0000-4000-8000-000000000099", userId: USER_ID }, 2),
+  ).not.toThrow();
 });

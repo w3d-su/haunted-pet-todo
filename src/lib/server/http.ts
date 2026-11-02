@@ -50,7 +50,7 @@ export async function readJson(request: Request): Promise<unknown> {
 }
 
 export function storageFailure(error: unknown): Response {
-  if (error instanceof DemoLimitError) return conflict(error.message);
+  if (error instanceof DemoLimitError) return json({ error: error.message }, 429);
   if (error instanceof RetryLaterError) return retryLater();
   if (error instanceof SupabaseConfigError) {
     return json({ error: error.message }, 503);

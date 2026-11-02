@@ -36,6 +36,16 @@ function markDone(tasks: readonly TaskView[], id: string): TaskView[] {
   }));
 }
 
+async function failureMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error.length > 0) return body.error;
+  } catch {
+    // The body was not JSON. The fallback still tells the player what failed.
+  }
+  return fallback;
+}
+
 function supabaseConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -116,7 +126,7 @@ export function GameStateProvider({
             method: "POST",
             credentials: "same-origin",
           });
-          if (!session.ok) throw new Error("Demo mode is locked.");
+          if (!session.ok) throw new Error(await failureMessage(session, "Demo mode is locked."));
         }
         if (!cancelled) await refresh();
         if (!cancelled) setError(null);
@@ -161,7 +171,9 @@ export function GameStateProvider({
           method: "POST",
           body: JSON.stringify(draft),
         });
-        if (!response.ok) throw new Error("The task slipped through the floorboards.");
+        if (!response.ok) {
+          throw new Error(await failureMessage(response, "The task slipped through the floorboards."));
+        }
         await refresh();
       }),
     completeTask: (id) =>
@@ -171,7 +183,7 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ id, status: "done" }),
         });
-        if (!response.ok) throw new Error("That task would not close.");
+        if (!response.ok) throw new Error(await failureMessage(response, "That task would not close."));
         await refresh();
       }),
     reorder: (orderedIds) =>
@@ -183,7 +195,7 @@ export function GameStateProvider({
             method: "PATCH",
             body: JSON.stringify({ id, sortOrder: index + 1 }),
           });
-          if (!response.ok) throw new Error("The list would not shuffle.");
+          if (!response.ok) throw new Error(await failureMessage(response, "The list would not shuffle."));
         }
         await refresh();
       }),
@@ -193,7 +205,7 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ type: "REBIRTH" }),
         });
-        if (!response.ok) throw new Error("The egg is not ready.");
+        if (!response.ok) throw new Error(await failureMessage(response, "The egg is not ready."));
         await refresh();
       }),
   };

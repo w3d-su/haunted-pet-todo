@@ -8,7 +8,7 @@ import { SystemClock } from "@/lib/server/clock";
 import type { AuthedStores } from "@/lib/server/stores";
 import { syncWorld } from "@/lib/server/sync";
 
-/** A few pets at a time, so a couple of thousand fit inside the 60s Hobby limit. */
+/** A few pets at a time. About 2500 pets fit well inside Hobby's 300s Fluid limit. */
 const CRON_CONCURRENCY = 4;
 
 export interface CronDeps {

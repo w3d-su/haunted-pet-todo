@@ -1,5 +1,11 @@
 import { expect, it } from "vitest";
-import { MAX_HP, TASK_HP_RESTORE, TASK_HUNGER_RESTORE, TASK_MOOD_BOOST } from "@/lib/game/constants";
+import {
+  MAX_HP,
+  TASK_HP_RESTORE,
+  TASK_HUNGER_RESTORE,
+  TASK_MOOD_BOOST,
+  ZOMBIE_DRAIN_PER_HOUR,
+} from "@/lib/game/constants";
 import { calendarDay } from "@/lib/game/evolution";
 import {
   FALLBACK_EPITAPH,
@@ -251,4 +257,16 @@ it("leaves an unknown event alone", () => {
   const state = pet();
   const result = applyPetEvent(state, { type: "PET_HATCHED" }, START);
   expect(result.state).toBe(state);
+});
+
+it("treats a speck of HP left by zombie drain as death", () => {
+  const damage = ZOMBIE_DRAIN_PER_HOUR * (1 / HOUR);
+  const state = pet({ stage: "adult", hp: damage + 1e-12 });
+  const result = applyPetEvent(
+    state,
+    { type: "ZOMBIE_DRAIN", zombieCount: 1, fromTime: START, toTime: START + 1 },
+    START + 1,
+  );
+  expect(result.state.status).toBe("dead");
+  expect(result.state.hp).toBe(0);
 });
