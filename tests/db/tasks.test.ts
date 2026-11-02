@@ -7,10 +7,25 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { runDecayCron } from "@/app/api/cron/decay/handlers";
 import { getPet } from "@/app/api/pet/handlers";
 import { postTask } from "@/app/api/tasks/handlers";
+import { takeAiBudget } from "@/lib/db/ai-budget";
 import { commitCompletion } from "@/lib/db/completion";
+import { claimNagDay } from "@/lib/db/nag";
 import { appendEvent, listEvents } from "@/lib/db/events";
 import { getPetRecord, listPetUserIds, savePetState, setClockOffset } from "@/lib/db/pet";
-import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
+import {
+  deletePushSubscription,
+  listPushSubscriptions,
+  upsertPushSubscription,
+} from "@/lib/db/push";
+import {
+  claimBreakdown,
+  getTasks,
+  releaseBreakdown,
+  markOverdue,
+  softDeleteTask,
+  updateOpen,
+  upsertTask,
+} from "@/lib/db/tasks";
 import type { Task } from "@/lib/game/tasks";
 import type { AppDeps, AuthedStores } from "@/lib/server/stores";
 import { request, USER_ID } from "../helpers/world";
@@ -39,9 +54,23 @@ function pgStores(pool: Pool, now: number): { deps: AppDeps; stores: () => Promi
       markOverdue: (taskId, id) => markOverdue(supabase, taskId, id),
       updateOpen: (task) => updateOpen(supabase, task),
       softDeleteTask: (taskId, id, at) => softDeleteTask(supabase, taskId, id, at),
+      claimBreakdown: (taskId, id) => claimBreakdown(supabase, taskId, id),
+      releaseBreakdown: (taskId, id) => releaseBreakdown(supabase, taskId, id),
     },
     events: {
       appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),
+      listEvents: (id) => listEvents(supabase, id),
+    },
+    push: {
+      list: (id) => listPushSubscriptions(supabase, id),
+      upsert: (id, subscription) => upsertPushSubscription(supabase, id, subscription),
+      remove: (id, endpoint) => deletePushSubscription(supabase, id, endpoint),
+    },
+    nags: {
+      claimDay: (id, day) => claimNagDay(supabase, id, day),
+    },
+    budget: {
+      take: (id, at) => takeAiBudget(supabase, id, at),
     },
     commitCompletion: (input) => commitCompletion(supabase, input),
     setClockOffset: (id, shift) => setClockOffset(supabase, id, shift.clockOffsetMs, shift.clampTo),
@@ -71,7 +100,9 @@ describeDb("postgres task helpers, seq, and cron", () => {
   });
 
   async function empty(): Promise<void> {
-    await pool.query("truncate public.tasks, public.events, public.pet_state");
+    await pool.query(
+      "truncate public.tasks, public.events, public.pet_state, public.push_subscriptions",
+    );
   }
 
   it("maps a task to snake_case and hides soft-deleted rows", async () => {
@@ -168,13 +199,15 @@ describeDb("postgres task helpers, seq, and cron", () => {
     );
     expect(saved).not.toBeNull();
 
-    const denied = await runDecayCron(new Request("http://localhost/api/cron/decay"), {
+    const cronBase = {
       now: () => START + 2 * HOUR,
       newId: () => crypto.randomUUID(),
       secret: "db-cron",
       listUserIds: () => listPetUserIds(supabase),
       storesFor: () => stores(),
-    });
+      deliverPush: async () => "sent" as const,
+    };
+    const denied = await runDecayCron(new Request("http://localhost/api/cron/decay"), cronBase);
     expect(denied.status).toBe(401);
     expect((await getPetRecord(supabase, USER_ID))?.state.hp).toBe(4);
 
@@ -182,13 +215,7 @@ describeDb("postgres task helpers, seq, and cron", () => {
       new Request("http://localhost/api/cron/decay", {
         headers: { authorization: "Bearer db-cron" },
       }),
-      {
-        now: () => START + 2 * HOUR,
-        newId: () => crypto.randomUUID(),
-        secret: "db-cron",
-        listUserIds: () => listPetUserIds(supabase),
-        storesFor: () => stores(),
-      },
+      cronBase,
     );
     expect(ran.status).toBe(200);
     const body = (await ran.json()) as { processed: number; deaths: number };
@@ -197,12 +224,14 @@ describeDb("postgres task helpers, seq, and cron", () => {
     const pet = await getPetRecord(supabase, USER_ID);
     expect(pet?.state.status).toBe("dead");
     expect(pet?.state.hp).toBe(0);
+    expect(pet?.state.currentEpitaph).toBe("Here lies a to-do list. It never stood a chance.");
     const tasks = await getTasks(supabase, USER_ID);
     expect(tasks[0]?.status).toBe("overdue");
     const timeline = await listEvents(supabase, USER_ID);
     const types = timeline.map((event) => event.eventType);
     expect(types).toContain("TASK_OVERDUE");
     expect(types).toContain("PET_DIED");
+    expect(types).not.toContain("EPITAPH_READY");
     const seqs = timeline.map((event) => event.seq);
     expect([...seqs].sort((left, right) => left - right)).toEqual(seqs);
   });

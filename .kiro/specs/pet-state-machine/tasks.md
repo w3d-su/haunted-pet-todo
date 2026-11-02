@@ -133,15 +133,15 @@
 
 ## Week 3 (Nov 16–23): LLM Epitaphs, Evolution UI, Graveyard
 
-- [ ] 15. (Week 3) Implement epitaph prompt builder and API route
-  - [ ] 15.1 Implement `buildEpitaphPrompt(pet, tasks)` in `src/lib/ai/epitaph.ts`
-  - [ ] 15.2 Implement `src/app/api/ai/epitaph/route.ts` with LLM call + Zod validation + fallback
-  - [ ] 15.3 On success, POST to `/api/pet` with `EPITAPH_READY` event
+- [x] 15. (Week 3) Implement epitaph prompt builder and API route
+  - [x] 15.1 Implement `buildEpitaphPrompt(pet, tasks)` in `src/lib/ai/epitaph.ts`
+  - [x] 15.2 Implement `src/app/api/ai/epitaph/route.ts` with LLM call + Zod validation + fallback
+  - [x] 15.3 On success, apply `EPITAPH_READY` through the service-role pet save. `PATCH /api/pet` still rejects that event.
     - Files: `src/lib/ai/epitaph.ts`, `src/app/api/ai/epitaph/route.ts`
   _Requirements: 6.1, 6.2_
 
-- [ ] 16. (Week 3) Play evolution from the reducer's emitted events
-  - [ ] 16.1 When a server response includes an emitted `PET_EVOLVED`, play the evolution animation in `GameStateProvider`
+- [x] 16. (Week 3) Play evolution from the reducer's emitted events
+  - [x] 16.1 When a server response includes an emitted `PET_EVOLVED`, play the evolution animation in `GameStateProvider`
   - 16.2 Removed. The client must not call `canEvolve` or dispatch `PET_EVOLVED`. `applyPetEvent` decides evolution and returns it in `emitted`.
     - Files: `src/components/providers/GameStateProvider.tsx`
   _Requirements: 4.1–4.7_

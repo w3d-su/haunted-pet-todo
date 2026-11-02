@@ -19,6 +19,7 @@ import {
 } from "@/lib/game/pet";
 import { isOverdue, type Task, type TaskCategory, type TaskSize, type TaskStatus } from "@/lib/game/tasks";
 import { activeZombies, zombieDamage } from "@/lib/game/zombies";
+import { BreakdownResponseSchema } from "@/lib/ai/schemas";
 import type { GameEvent } from "@/lib/game/events";
 
 /** Every property below runs this many fast-check cases. */
@@ -617,6 +618,25 @@ it("reset pulls lastCompletionDay back with the completion instant", () => {
           now,
         );
         expect(done.state.currentStreak).toBe(clamped.currentStreak);
+      },
+    ),
+  );
+});
+
+it("P17 a breakdown that parses has 3 to 7 subtasks", () => {
+  check(
+    fc.property(
+      fc.string({ minLength: 1, maxLength: 140 }).filter((value) => value.trim().length > 0),
+      fc.array(
+        fc.string({ minLength: 1, maxLength: 80 }).filter((value) => value.trim().length > 0),
+        { minLength: 3, maxLength: 7 },
+      ),
+      (intro, subtasks) => {
+        const parsed = BreakdownResponseSchema.safeParse({ intro, subtasks });
+        expect(parsed.success).toBe(true);
+        if (!parsed.success) return;
+        expect(parsed.data.subtasks.length).toBeGreaterThanOrEqual(3);
+        expect(parsed.data.subtasks.length).toBeLessThanOrEqual(7);
       },
     ),
   );

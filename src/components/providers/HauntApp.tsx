@@ -58,9 +58,14 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
             {hatching ? (
               <EggHatch onDone={finishHatch} />
             ) : dead ? null : (
-              <PetSprite pet={pet} />
+              <PetSprite pet={pet} evolving={game.evolving} />
             )}
-            <SpeechBubble line={line} />
+            {game.evolving ? (
+              <p className="mt-2 text-[8px] leading-relaxed text-pumpkin" role="status">
+                Your pet evolved.
+              </p>
+            ) : null}
+            <SpeechBubble line={pet.status === "alive" ? (game.breakdownLine ?? line) : null} />
             <PetStats pet={pet} />
             {pet.graveyard.length > 0 ? (
               <details className="mt-4 text-left">
@@ -84,6 +89,7 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
           pending={game.pending}
           onComplete={(id) => void game.completeTask(id)}
           onReorder={(ids) => void game.reorder(ids)}
+          onBreakdown={(id) => void game.requestBreakdown(id)}
         />
         {demoMode ? (
           <DemoControls clockOffsetMs={game.clockOffsetMs} onRefresh={game.refresh} />

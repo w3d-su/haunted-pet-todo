@@ -348,9 +348,15 @@ function applyEpitaphReady(
   state: PetState,
   event: Extract<GameEvent, { type: "EPITAPH_READY" }>,
 ): PetReduction {
-  if (state.status !== "dead") return unchanged(state);
+  if (state.status === "tombstone") return unchanged(state);
+  if (state.status !== "dead" && !hpSpent(state.hp)) return unchanged(state);
   return {
-    state: { ...state, status: "tombstone", currentEpitaph: event.epitaph },
+    state: {
+      ...state,
+      status: "tombstone",
+      hp: 0,
+      currentEpitaph: event.epitaph,
+    },
     emitted: [],
   };
 }

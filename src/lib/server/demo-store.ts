@@ -80,6 +80,9 @@ export function dropDemoUser(world: MemoryWorld, userId: string): void {
   for (let index = world.events.length - 1; index >= 0; index -= 1) {
     if (world.events[index]?.userId === userId) world.events.splice(index, 1);
   }
+  for (let index = world.pushes.length - 1; index >= 0; index -= 1) {
+    if (world.pushes[index]?.userId === userId) world.pushes.splice(index, 1);
+  }
 }
 
 /**

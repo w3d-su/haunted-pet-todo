@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
-import { runDecayCron } from "@/app/api/cron/decay/handlers";
+import { runDecayCron, type CronDeps } from "@/app/api/cron/decay/handlers";
 import { DECAY_RATE_HP, ZOMBIE_DRAIN_PER_HOUR } from "@/lib/game/constants";
-import { initialPetState } from "@/lib/game/pet";
+import { FALLBACK_EPITAPH, initialPetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 import type { AuthedStores } from "@/lib/server/stores";
 import { createMemoryWorld, USER_ID } from "../helpers/world";
@@ -33,12 +33,13 @@ function task(dueAt: number): Task {
 function cronDeps(
   world: ReturnType<typeof createMemoryWorld>,
   secret: string | undefined,
-) {
+): CronDeps {
   return {
     now: () => NOW,
     newId: () => crypto.randomUUID(),
     secret,
     listUserIds: async () => [...world.pets.keys()],
+    deliverPush: async () => "sent",
     async storesFor(userId: string): Promise<AuthedStores> {
       const stores = await world.deps(userId, NOW).authorize(new Request("http://localhost"));
       if (!stores) throw new Error("missing stores");
@@ -150,4 +151,73 @@ it("counts one user's failure and still processes the next", async () => {
   expect(body.failures).toBe(1);
   expect(body.processed).toBe(1);
   expect(world.pets.get(other)?.state.hp).toBe(100 - 2 * DECAY_RATE_HP);
+});
+
+it("records a death and leaves the epitaph for the tombstone view", async () => {
+  const world = seed("hatchling", 4);
+  const response = await runDecayCron(
+    new Request("http://localhost/api/cron/decay", {
+      headers: { authorization: `Bearer ${SECRET}` },
+    }),
+    cronDeps(world, SECRET),
+  );
+  expect(response.status).toBe(200);
+  expect(world.pets.get(USER_ID)?.state.status).toBe("dead");
+  expect(world.pets.get(USER_ID)?.state.currentEpitaph).toBe(FALLBACK_EPITAPH);
+  expect(world.events.some((event) => event.eventType === "EPITAPH_READY")).toBe(false);
+});
+
+it("sends one daily nag when work is open and nothing was finished today", async () => {
+  const world = seed("hatchling");
+  world.pushes.push({
+    userId: USER_ID,
+    endpoint: "https://fcm.googleapis.com/fcm/send/haunt",
+    p256dh: "key",
+    auth: "secret",
+  });
+  const sent: { body: string; endpoint: string }[] = [];
+  const deps = cronDeps(world, SECRET);
+  deps.deliverPush = async (subscription, payload) => {
+    sent.push({ body: payload.body, endpoint: subscription.endpoint });
+    return "sent";
+  };
+  const response = await runDecayCron(
+    new Request("http://localhost/api/cron/decay", {
+      headers: { authorization: `Bearer ${SECRET}` },
+    }),
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.endpoint).toBe("https://fcm.googleapis.com/fcm/send/haunt");
+  expect(sent[0]?.body.length).toBeGreaterThan(0);
+  expect(sent[0]?.body.length).toBeLessThanOrEqual(140);
+
+  sent.length = 0;
+  await runDecayCron(
+    new Request("http://localhost/api/cron/decay", {
+      headers: { authorization: `Bearer ${SECRET}` },
+    }),
+    deps,
+  );
+  expect(sent).toHaveLength(0);
+});
+
+it("drops a subscription the push service says is gone", async () => {
+  const world = seed("hatchling");
+  world.pushes.push({
+    userId: USER_ID,
+    endpoint: "https://fcm.googleapis.com/fcm/send/gone",
+    p256dh: "key",
+    auth: "secret",
+  });
+  const deps = cronDeps(world, SECRET);
+  deps.deliverPush = async () => "gone";
+  await runDecayCron(
+    new Request("http://localhost/api/cron/decay", {
+      headers: { authorization: `Bearer ${SECRET}` },
+    }),
+    deps,
+  );
+  expect(world.pushes).toHaveLength(0);
 });

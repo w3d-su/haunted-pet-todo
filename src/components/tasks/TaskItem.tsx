@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { PixelButton } from "@/components/ui/PixelButton";
+import { SubtaskList } from "@/components/tasks/SubtaskList";
 import type { TaskView } from "@/components/tasks/TaskList";
 
 const badge: Record<TaskView["status"], string> = {
@@ -15,12 +16,14 @@ export function TaskItem({
   task,
   pending,
   onComplete,
+  onBreakdown,
   onDragStart,
   onDrop,
 }: {
   task: TaskView;
   pending: boolean;
   onComplete: (id: string) => void;
+  onBreakdown: (id: string) => void;
   onDragStart: (id: string) => void;
   onDrop: (targetId: string) => void;
 }) {
@@ -66,15 +69,12 @@ export function TaskItem({
           </PixelButton>
         )}
       </div>
-      {task.subtasks.length > 0 ? (
-        <ul className="mt-3 flex flex-col gap-2 pl-3">
-          {task.subtasks.map((subtask) => (
-            <li key={subtask.id} className="text-[8px] leading-relaxed text-ghost-dim">
-              {subtask.title} ({subtask.status})
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      <SubtaskList
+        task={task}
+        pending={pending}
+        onComplete={onComplete}
+        onBreakdown={onBreakdown}
+      />
     </li>
   );
 }

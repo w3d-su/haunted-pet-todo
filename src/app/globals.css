@@ -69,12 +69,35 @@ body {
   animation-iteration-count: infinite;
 }
 
+.pet-evolving {
+  animation: evolve-flash 0.8s steps(3, end);
+}
+
+@keyframes evolve-flash {
+  0% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  40% {
+    transform: scale(1.12);
+    filter: brightness(1.8);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crt-scanlines {
     display: none;
   }
 
   .zombie-march {
+    animation: none;
+  }
+
+  .pet-evolving {
     animation: none;
   }
 }

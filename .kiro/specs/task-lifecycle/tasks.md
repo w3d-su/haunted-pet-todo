@@ -112,32 +112,32 @@
 
 ## Week 3 (Nov 16–23): AI Breakdown, Subtasks, Nag Integration
 
-- [ ] 14. (Week 3) Implement `src/lib/ai/breakdown.ts` and Zod schema
-  - [ ] 14.1 Implement `buildBreakdownPrompt(task)` — pure prompt builder
-  - [ ] 14.2 Define `BreakdownResponseSchema` in `src/lib/ai/schemas.ts`
+- [x] 14. (Week 3) Implement `src/lib/ai/breakdown.ts` and Zod schema
+  - [x] 14.1 Implement `buildBreakdownPrompt(task)` — pure prompt builder
+  - [x] 14.2 Define `BreakdownResponseSchema` in `src/lib/ai/schemas.ts`
     - Files: `src/lib/ai/breakdown.ts`, `src/lib/ai/schemas.ts`
   _Requirements: 11.2, 11.3_
 
-- [ ] 15. (Week 3) Implement `src/app/api/ai/breakdown/route.ts`
-  - [ ] 15.1 POST: validate request body with Zod (task id)
-  - [ ] 15.2 Fetch task from DB, build prompt, call LLM
-  - [ ] 15.3 Validate LLM response with `BreakdownResponseSchema`; return fallback on failure
-  - [ ] 15.4 On success, create subtask rows via `upsertTask` and set `breakdownSuggested = true`
+- [x] 15. (Week 3) Implement `src/app/api/ai/breakdown/route.ts`
+  - [x] 15.1 POST: validate request body with Zod (task id)
+  - [x] 15.2 Fetch task from DB, build prompt, call LLM
+  - [x] 15.3 Validate LLM response with `BreakdownResponseSchema`; return fallback on failure
+  - [x] 15.4 On success, create subtask rows via `upsertTask` and set `breakdownSuggested = true`
     - Files: `src/app/api/ai/breakdown/route.ts`
   _Requirements: 11.1–11.4_
 
-- [ ] 16. (Week 3) Implement `SubtaskList.tsx` and breakdown UI
-  - [ ] 16.1 `SubtaskList.tsx`: render subtasks with individual complete checkboxes
-  - [ ] 16.2 Show "Ask ghost to break this down 👻" button for large tasks with `breakdownSuggested = false`
-  - [ ] 16.3 Display ghost-voice intro line from breakdown response in `SpeechBubble`
+- [x] 16. (Week 3) Implement `SubtaskList.tsx` and breakdown UI
+  - [x] 16.1 `SubtaskList.tsx`: render subtasks with individual complete checkboxes
+  - [x] 16.2 Show "Ask ghost to break this down 👻" button for large tasks with `breakdownSuggested = false`
+  - [x] 16.3 Display ghost-voice intro line from breakdown response in `SpeechBubble`
     - Files: `src/components/tasks/SubtaskList.tsx`
   _Requirements: 10.1–10.3, 11.1, 11.4_
 
-- [ ] 17. (Week 3) Write unit tests for AI breakdown
-  - [ ] 17.1 Test `buildBreakdownPrompt` includes title and omits null notes
-  - [ ] 17.2 Test `BreakdownResponseSchema` rejects < 3 subtasks
-  - [ ] 17.3 Test `BreakdownResponseSchema` rejects > 7 subtasks
-  - [ ] 17.4 Write property test for Property P17 (breakdown 3–7 items)
+- [x] 17. (Week 3) Write unit tests for AI breakdown
+  - [x] 17.1 Test `buildBreakdownPrompt` includes title and omits null notes
+  - [x] 17.2 Test `BreakdownResponseSchema` rejects < 3 subtasks
+  - [x] 17.3 Test `BreakdownResponseSchema` rejects > 7 subtasks
+  - [x] 17.4 Write property test for Property P17 (breakdown 3–7 items)
     - Files: `tests/ai/breakdown.test.ts`, `tests/game/invariants.property.ts`
   _Requirements: 11.2, 11.3, P17_
 

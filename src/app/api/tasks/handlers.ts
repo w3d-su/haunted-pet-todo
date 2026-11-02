@@ -274,7 +274,11 @@ async function completeTask(
     });
     if (result.status === "conflict") return conflict("Task is already done");
     if (result.status === "ok") {
-      return json({ task: result.task, pet: deriveHoursAsAdult(result.snapshot.state, now) });
+      return json({
+        task: result.task,
+        pet: deriveHoursAsAdult(result.snapshot.state, now),
+        emitted: [...caught.emitted, ...reduction.emitted],
+      });
     }
   }
   return retryLater();

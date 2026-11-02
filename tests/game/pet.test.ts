@@ -128,6 +128,16 @@ it("kills the pet when a decay tick reaches 0 HP and keeps the stage", () => {
   expect(result.emitted[0]?.type).toBe("PET_DIED");
 });
 
+it("carves an epitaph when only a speck of HP remains", () => {
+  const state = pet({ status: "alive", stage: "adult", hp: 1e-12 });
+  const result = applyPetEvent(state, { type: "EPITAPH_READY", epitaph: "So long." }, START);
+  expect(result.state.status).toBe("tombstone");
+  expect(result.state.hp).toBe(0);
+  expect(result.state.currentEpitaph).toBe("So long.");
+  const living = pet({ status: "alive", hp: 40 });
+  expect(applyPetEvent(living, { type: "EPITAPH_READY", epitaph: "No." }, START).state).toBe(living);
+});
+
 it("turns a dead pet into a tombstone when the epitaph arrives", () => {
   const state = pet({ status: "dead", hp: 0 });
   const result = applyPetEvent(state, { type: "EPITAPH_READY", epitaph: "So long." }, START);

@@ -21,6 +21,14 @@ export function conflict(message: string): Response {
   return json({ error: message }, 409);
 }
 
+/** This user already has five push subscriptions. */
+export class PushCapError extends Error {
+  constructor() {
+    super("Too many push subscriptions");
+    this.name = "PushCapError";
+  }
+}
+
 /** The local demo will not store another task for this user. */
 export class DemoLimitError extends Error {
   constructor() {
@@ -50,6 +58,7 @@ export async function readJson(request: Request): Promise<unknown> {
 }
 
 export function storageFailure(error: unknown): Response {
+  if (error instanceof PushCapError) return json({ error: error.message }, 409);
   if (error instanceof DemoLimitError) return json({ error: error.message }, 429);
   if (error instanceof RetryLaterError) return retryLater();
   if (error instanceof SupabaseConfigError) {

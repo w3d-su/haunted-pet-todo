@@ -77,8 +77,8 @@ This file defines the single authoritative execution order for a coding agent wo
 | 6 | task-lifecycle/tasks.md task 17 | Unit + property tests for AI breakdown (P17) |
 | 7 | decay-and-time-travel/tasks.md task 11 | `src/lib/push/vapid.ts`, `src/lib/push/notify.ts` |
 | 8 | decay-and-time-travel/tasks.md task 12 | `src/app/api/push/route.ts` |
-| 9 | decay-and-time-travel/tasks.md task 13 | Supabase migration `0003_push.sql` |
-| 10 | decay-and-time-travel/tasks.md task 14 | Habitual-time push logic in cron handler |
+| 9 | decay-and-time-travel/tasks.md task 13 | Supabase migration `0004_push.sql` (`0003_events_seq.sql` already exists; RLS stays select-only) |
+| 10 | decay-and-time-travel/tasks.md task 14 | One nag per local day in the daily cron. Hobby cannot run an hourly cron. |
 | 11 | decay-and-time-travel/tasks.md task 15 | Push subscription UI in `GameStateProvider.tsx` |
 
 ---

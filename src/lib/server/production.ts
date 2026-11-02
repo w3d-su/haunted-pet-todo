@@ -1,7 +1,22 @@
+import { takeAiBudget } from "@/lib/db/ai-budget";
 import { commitCompletion } from "@/lib/db/completion";
-import { appendEvent } from "@/lib/db/events";
+import { appendEvent, listEvents } from "@/lib/db/events";
+import { claimNagDay } from "@/lib/db/nag";
 import { getPetRecord, savePetState, setClockOffset } from "@/lib/db/pet";
-import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
+import {
+  deletePushSubscription,
+  listPushSubscriptions,
+  upsertPushSubscription,
+} from "@/lib/db/push";
+import {
+  claimBreakdown,
+  getTasks,
+  releaseBreakdown,
+  markOverdue,
+  softDeleteTask,
+  updateOpen,
+  upsertTask,
+} from "@/lib/db/tasks";
 import { bearerToken, createServiceClient, createUserClient } from "@/lib/db/client";
 import { userIdFromAccessToken } from "@/lib/db/auth";
 import { authorizeDemo, memoryDemoAllowed } from "@/lib/server/demo-store";
@@ -25,9 +40,23 @@ function serviceStores(userId: string): AuthedStores {
       markOverdue: (taskId, id) => markOverdue(writer, taskId, id),
       updateOpen: (task) => updateOpen(writer, task),
       softDeleteTask: (taskId, id, now) => softDeleteTask(writer, taskId, id, now),
+      claimBreakdown: (taskId, id) => claimBreakdown(writer, taskId, id),
+      releaseBreakdown: (taskId, id) => releaseBreakdown(writer, taskId, id),
     },
     events: {
       appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
+      listEvents: (id) => listEvents(writer, id),
+    },
+    push: {
+      list: (id) => listPushSubscriptions(writer, id),
+      upsert: (id, subscription) => upsertPushSubscription(writer, id, subscription),
+      remove: (id, endpoint) => deletePushSubscription(writer, id, endpoint),
+    },
+    nags: {
+      claimDay: (id, day) => claimNagDay(writer, id, day),
+    },
+    budget: {
+      take: (id, now) => takeAiBudget(writer, id, now),
     },
     commitCompletion: (input) => commitCompletion(writer, input),
     setClockOffset: (id, shift) =>
@@ -60,9 +89,23 @@ export function productionDeps(): AppDeps {
             markOverdue: (taskId, id) => markOverdue(writer, taskId, id),
             updateOpen: (task) => updateOpen(writer, task),
             softDeleteTask: (taskId, id, now) => softDeleteTask(writer, taskId, id, now),
+            claimBreakdown: (taskId, id) => claimBreakdown(writer, taskId, id),
+            releaseBreakdown: (taskId, id) => releaseBreakdown(writer, taskId, id),
           },
           events: {
             appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
+            listEvents: (id) => listEvents(reader, id),
+          },
+          push: {
+            list: (id) => listPushSubscriptions(reader, id),
+            upsert: (id, subscription) => upsertPushSubscription(writer, id, subscription),
+            remove: (id, endpoint) => deletePushSubscription(writer, id, endpoint),
+          },
+          nags: {
+            claimDay: (id, day) => claimNagDay(writer, id, day),
+          },
+          budget: {
+            take: (id, now) => takeAiBudget(writer, id, now),
           },
           commitCompletion: (input) => commitCompletion(writer, input),
           setClockOffset: (id, shift) =>
