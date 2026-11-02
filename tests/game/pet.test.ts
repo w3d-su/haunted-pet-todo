@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import { MAX_HP, TASK_HP_RESTORE, TASK_HUNGER_RESTORE, TASK_MOOD_BOOST } from "@/lib/game/constants";
 import { calendarDay } from "@/lib/game/evolution";
 import {
+  FALLBACK_EPITAPH,
   applyPetEvent,
   catchUp,
   initialPetState,
@@ -116,6 +117,8 @@ it("kills the pet when a decay tick reaches 0 HP and keeps the stage", () => {
   expect(result.state.hp).toBe(0);
   expect(result.state.status).toBe("dead");
   expect(result.state.stage).toBe("adult_scholar");
+  expect(result.state.diedAt).toBe(START + HOUR);
+  expect(result.state.currentEpitaph).toBe(FALLBACK_EPITAPH);
   expect(result.emitted[0]?.type).toBe("PET_DIED");
 });
 
@@ -138,6 +141,20 @@ it("rebirths only a tombstone into a full-HP egg and appends the graveyard", () 
   expect(next.graveyard[0]).toMatchObject({ id: "stone-1", epitaph: "Bye", tasksCompletedTotal: 4 });
   const alive = pet();
   expect(rebirthPet(alive, START, "stone-2")).toBe(alive);
+  const unmarked = pet({
+    status: "dead",
+    hp: 0,
+    stage: "adult",
+    diedAt: START - HOUR,
+    currentEpitaph: null,
+  });
+  const reborn = rebirthPet(unmarked, START, "stone-3");
+  expect(reborn.stage).toBe("egg");
+  expect(reborn.status).toBe("alive");
+  expect(reborn.graveyard[0]).toMatchObject({
+    diedAt: START - HOUR,
+    epitaph: FALLBACK_EPITAPH,
+  });
 });
 
 it("ignores decay on dead and tombstone pets", () => {
@@ -184,6 +201,19 @@ it("emits STREAK_BROKEN when decay resets the streak", () => {
   );
   expect(result.state.currentStreak).toBe(0);
   expect(result.emitted.map((event) => event.type)).toContain("STREAK_BROKEN");
+});
+
+it("does not let zombies damage an egg", () => {
+  const state = pet({ stage: "egg", hp: MAX_HP, lastTickAt: START });
+  const drained = applyPetEvent(
+    state,
+    { type: "ZOMBIE_DRAIN", zombieCount: 3, fromTime: START, toTime: START + 5 * HOUR },
+    START,
+  );
+  expect(drained.state).toBe(state);
+  const caught = catchUp(state, [task({ status: "overdue", dueAt: START - HOUR })], START + 2 * HOUR);
+  expect(caught.state.hp).toBe(MAX_HP);
+  expect(caught.state.status).toBe("alive");
 });
 
 it("charges zombie drain only for the hours a task was actually overdue", () => {

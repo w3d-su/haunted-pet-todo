@@ -65,15 +65,15 @@
     - Files: `src/app/api/cron/decay/route.ts`
   _Requirements: 5.1, 5.2, 6.1–6.5_
 
-- [x] 7. (Week 2) Add cron schedule to `vercel.json`
-  - [x] 7.1 Add `"crons": [{ "path": "/api/cron/decay", "schedule": "0 8 * * *" }]` (daily; Hobby rejects hourly)
+- [ ] 7. (Week 2) Add cron schedule to `vercel.json`
+  - [ ] 7.1 Add `"crons": [{ "path": "/api/cron/decay", "schedule": "0 8 * * *" }]` (daily; Hobby rejects hourly) only once `src/app/api/cron/decay/route.ts` exists. Do not point `vercel.json` at a missing route.
     - Files: `vercel.json`
   _Requirements: 6.5_
 
 - [ ] 8. (Week 2) Implement `src/app/api/demo/fast-forward/route.ts`
   - [ ] 8.1 Require auth. Return 403 unless server `DEMO_MODE === "true"`. Add `N` hours to `pet_state.clock_offset_ms`; do not push `lastTickAt` past the effective clock.
   - [ ] 8.2 Parse request body with `FastForwardBodySchema` (Zod); return 400 if invalid
-  - [ ] 8.3 Implement `reset: true` branch: set that user's `clock_offset_ms` to 0
+  - [ ] 8.3 Implement `reset: true` branch: set `clock_offset_ms` to 0 and clamp future `lastTickAt` (and other future game timestamps) to the new effective now
   - [ ] 8.4 Implement `hours: N` branch: add N hours to `clock_offset_ms`, then run the same catch-up as a read
   - [ ] 8.5 Ensure each iteration of the loop calls the same code path as the real cron handler (shared helper function, not duplicated logic)
   - [ ] 8.6 Return updated `PetState` after all ticks

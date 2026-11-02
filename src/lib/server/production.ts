@@ -1,7 +1,7 @@
 import { appendEvent } from "@/lib/db/events";
 import { getPetRecord, savePetState } from "@/lib/db/pet";
-import { getTasks, softDeleteTask, upsertTask } from "@/lib/db/tasks";
-import { bearerToken, createUserClient } from "@/lib/db/client";
+import { claimDone, getTasks, softDeleteTask, upsertTask } from "@/lib/db/tasks";
+import { bearerToken, createServiceClient, createUserClient } from "@/lib/db/client";
 import { userIdFromAccessToken } from "@/lib/db/auth";
 import { SystemClock } from "@/lib/server/clock";
 import type { AppDeps } from "@/lib/server/stores";
@@ -18,20 +18,22 @@ export function productionDeps(): AppDeps {
       if (!token) return null;
       const userId = await userIdFromAccessToken(token);
       if (!userId) return null;
-      const supabase = createUserClient(token);
+      const reader = createUserClient(token);
+      const writer = createServiceClient();
       return {
         userId,
         pets: {
-          get: (id) => getPetRecord(supabase, id),
-          save: (state) => savePetState(supabase, state),
+          get: (id) => getPetRecord(reader, id),
+          save: (state, expectedVersion) => savePetState(writer, state, expectedVersion),
         },
         tasks: {
-          getTasks: (id) => getTasks(supabase, id),
-          upsertTask: (task) => upsertTask(supabase, task),
-          softDeleteTask: (taskId, id, now) => softDeleteTask(supabase, taskId, id, now),
+          getTasks: (id) => getTasks(reader, id),
+          upsertTask: (task) => upsertTask(writer, task),
+          claimDone: (task, now) => claimDone(writer, task, now),
+          softDeleteTask: (taskId, id, now) => softDeleteTask(writer, taskId, id, now),
         },
         events: {
-          appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),
+          appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
         },
       };
     },

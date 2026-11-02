@@ -3,12 +3,12 @@
   "hooks": [
     {
       "name": "No Date.now() in Game Core",
-      "description": "Fails with a clear error message if any saved file inside src/lib/game/ contains Date.now( or new Date() without arguments. Enforces the injectable-clock rule: all game logic must accept a `now: number` parameter instead of reading the system clock directly.",
+      "description": "Runs the shared ESLint game-core rule on the saved file. PostFileSave cannot block the save; a failing command reports the violation. CI runs the same rule.",
       "trigger": "PostFileSave",
       "matcher": "src/lib/game/.*\\.tsx?$",
       "action": {
         "type": "command",
-        "command": "node -e \"const c=[];process.stdin.on('data',d=>c.push(d));process.stdin.on('end',()=>{let f;try{f=JSON.parse(Buffer.concat(c).toString()).file_path;}catch(e){process.exit(0);}if(!f)process.exit(0);const fs=require('fs');let s;try{s=fs.readFileSync(f,'utf8');}catch(e){process.exit(0);}const p=/Date\\\\.now\\\\(|new Date\\\\(\\\\s*\\\\)/;const v=s.split(/\\r?\\n/).map((l,i)=>({l,n:i+1})).filter(({l})=>p.test(l));if(!v.length)process.exit(0);process.stderr.write(['','\\u{1F6AB} Injectable-clock violation in '+f,'src/lib/game/ must never call Date.now() or new Date() directly.','Accept a now:number parameter or Clock interface instead.','','Offending lines:',...v.map(x=>'  '+x.n+': '+x.l.trim()),''].join('\\n'));process.exit(1);})\""
+        "command": "pnpm eslint {{filePath}}"
       }
     }
   ]

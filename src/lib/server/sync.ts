@@ -9,7 +9,10 @@ export interface World {
   readonly tasks: readonly Task[];
   readonly clockOffsetMs: number;
   readonly now: number;
+  readonly version: number;
 }
+
+const SAVE_ATTEMPTS = 3;
 
 function zoneFromHeader(header: string | null): string | null {
   if (!header || !isIanaTimeZone(header)) return null;
@@ -18,8 +21,8 @@ function zoneFromHeader(header: string | null): string | null {
 
 /**
  * Load the user's pet and tasks, then apply catch-up decay for the gap
- * since `lastTickAt`. Creates an egg on first contact. A valid
- * `X-Time-Zone` header sets the IANA zone used for streaks and evolution.
+ * since `lastTickAt`. Creates an egg on first contact. `X-Time-Zone` is
+ * stored only then; later requests cannot change it.
  */
 export async function syncWorld(
   stores: AuthedStores,
@@ -27,31 +30,45 @@ export async function syncWorld(
   timeZoneHeader: string | null,
   newId: () => string,
 ): Promise<World> {
+  for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt += 1) {
+    const world = await catchUpOnce(stores, systemNow, timeZoneHeader, newId);
+    if (world) return world;
+  }
+  throw new Error("pet_state version conflict");
+}
+
+async function catchUpOnce(
+  stores: AuthedStores,
+  systemNow: number,
+  timeZoneHeader: string | null,
+  newId: () => string,
+): Promise<World | null> {
   let record = await stores.pets.get(stores.userId);
   const requestedZone = zoneFromHeader(timeZoneHeader);
 
   if (!record) {
-    const state = initialPetState(
+    const created = initialPetState(
       stores.userId,
       systemNow,
       newId(),
       requestedZone ?? "UTC",
     );
-    const saved = await stores.pets.save(state);
-    record = { state: saved, clockOffsetMs: 0 };
-  }
-
-  let state = record.state;
-  if (requestedZone && requestedZone !== state.timeZone) {
-    state = { ...state, timeZone: requestedZone };
+    const saved = await stores.pets.save(created, 0);
+    if (!saved) return null;
+    record = saved;
   }
 
   const now = effectiveNow(systemNow, record.clockOffsetMs);
   const tasks = await stores.tasks.getTasks(stores.userId);
-  const caught = catchUp(state, tasks, now);
+  const caught = catchUp(record.state, tasks, now);
+  let pet = caught.state;
+  let version = record.version;
 
-  if (caught.state !== record.state) {
-    await stores.pets.save(caught.state);
+  if (pet !== record.state) {
+    const saved = await stores.pets.save(pet, version);
+    if (!saved) return null;
+    pet = saved.state;
+    version = saved.version;
   }
 
   for (const taskId of caught.overdueTaskIds) {
@@ -66,9 +83,10 @@ export async function syncWorld(
   }
 
   return {
-    pet: caught.state,
+    pet,
     tasks: caught.tasks,
     clockOffsetMs: record.clockOffsetMs,
     now,
+    version,
   };
 }

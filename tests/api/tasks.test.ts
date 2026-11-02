@@ -65,6 +65,7 @@ it("rejects a status change on a done task and restores a future due date", asyn
       stage: "adult",
     },
     clockOffsetMs: 0,
+    version: 1,
   });
   const created = await postTask(
     request("POST", "/api/tasks", { title: "Late", dueAt: NOW - 3_600_000 }),
@@ -88,7 +89,68 @@ it("rejects a status change on a done task and restores a future due date", asyn
     request("PATCH", "/api/tasks", { id: task.id, status: "overdue" }),
     deps,
   );
-  expect(blocked.status).toBe(409);
+  expect(blocked.status).toBe(400);
+});
+
+it("lets a client mark a task done, but not clear an overdue zombie by setting todo", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  const created = await postTask(
+    request("POST", "/api/tasks", { title: "Late", dueAt: NOW - 1000 }),
+    deps,
+  );
+  const { task } = (await created.json()) as { task: { id: string } };
+  await getTasksRoute(request("GET", "/api/tasks"), deps);
+
+  const erased = await patchTask(
+    request("PATCH", "/api/tasks", { id: task.id, status: "todo" }),
+    deps,
+  );
+  expect(erased.status).toBe(400);
+  expect(world.tasks.find((item) => item.id === task.id)?.status).toBe("overdue");
+
+  const moved = await patchTask(
+    request("PATCH", "/api/tasks", { id: task.id, dueAt: NOW + 3_600_000 }),
+    deps,
+  );
+  expect(moved.status).toBe(200);
+  expect(((await moved.json()) as { task: { status: string } }).task.status).toBe("todo");
+});
+
+it("two concurrent completions produce one 200 and one 409", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  world.pets.set(USER_ID, {
+    state: {
+      ...initialPetState(USER_ID, NOW, crypto.randomUUID(), "UTC"),
+      stage: "hatchling",
+      hp: 40,
+    },
+    clockOffsetMs: 0,
+    version: 1,
+  });
+  const created = await postTask(request("POST", "/api/tasks", { title: "Once" }), deps);
+  const { task } = (await created.json()) as { task: { id: string } };
+  const [first, second] = await Promise.all([
+    patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps),
+    patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps),
+  ]);
+  expect([first.status, second.status].sort()).toEqual([200, 409]);
+  expect(world.events.filter((event) => event.eventType === "TASK_COMPLETED")).toHaveLength(1);
+  expect(world.pets.get(USER_ID)?.state.hp).toBe(50);
+});
+
+it("rejects a parent task owned by someone else", async () => {
+  const world = createMemoryWorld();
+  const owner = world.deps(USER_ID, NOW);
+  const other = world.deps("22222222-2222-4222-8222-222222222222", NOW);
+  const created = await postTask(request("POST", "/api/tasks", { title: "Mine" }), owner);
+  const { task } = (await created.json()) as { task: { id: string } };
+  const child = await postTask(
+    request("POST", "/api/tasks", { title: "Not mine", parentId: task.id }),
+    other,
+  );
+  expect(child.status).toBe(404);
 });
 
 it("soft-deletes an overdue task and records the slain zombie", async () => {
@@ -122,6 +184,7 @@ it("catches the pet up on read using the stored clock offset", async () => {
       hp: MAX_HP,
     },
     clockOffsetMs: 0,
+    version: 1,
   });
   await getTasksRoute(request("GET", "/api/tasks"), deps);
   expect(world.pets.get(USER_ID)?.state.hp).toBe(MAX_HP - 10);

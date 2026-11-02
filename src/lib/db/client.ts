@@ -38,7 +38,19 @@ export function createUserClient(accessToken: string): SupabaseClient {
   });
 }
 
-/** Anon client for sign-in calls that do not yet have a user JWT. */
+/** Service-role client. Bypasses RLS. Server writes only; never send this key to the browser. */
+export function createServiceClient(): SupabaseClient {
+  const { url } = readSupabaseEnv();
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) {
+    throw new SupabaseConfigError("Set SUPABASE_SERVICE_ROLE_KEY. See README.");
+  }
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
+/** Anon client for browser sign-in. Do not proxy anonymous sign-in through the server. */
 export function createAnonClient(): SupabaseClient {
   const { url, anonKey } = readSupabaseEnv();
   return createClient(url, anonKey, {

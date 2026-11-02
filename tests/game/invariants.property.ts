@@ -4,8 +4,11 @@ import { OffsetClock } from "@/lib/game/clock";
 import { MAX_HP, ZOMBIE_DRAIN_PER_HOUR } from "@/lib/game/constants";
 import { decayStats } from "@/lib/game/decay";
 import { resolveEvolvedForm } from "@/lib/game/evolution";
+import { petRecordFromRow, petStateToRow } from "@/lib/db/pet";
+import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 import {
   applyPetEvent,
+  catchUp,
   clampStats,
   rebirthPet,
   type PetState,
@@ -81,6 +84,7 @@ const arbPetState: fc.Arbitrary<PetState> = fc
     currentEpitaph: fc.option(fc.string({ maxLength: 24 }), { nil: null }),
     graveyard: fc.array(arbTombstone, { maxLength: 2 }),
     lastTickAt: arbTs,
+    diedAt: fc.constant(null),
   })
   .map(({ history, ...rest }) => ({
     ...rest,
@@ -473,6 +477,59 @@ it("P25 zero elapsed decay is an identity", () => {
       expect(next.hunger).toBe(state.hunger);
       expect(next.mood).toBe(state.mood);
     }),
+  );
+});
+
+it("eggs take no zombie damage", () => {
+  check(
+    fc.property(arbEggState, arbDrainEvent, (state, event) => {
+      const result = applyPetEvent(state, event, event.toTime);
+      expect(result.state.hp).toBe(state.hp);
+      expect(result.state.status).toBe(state.status);
+      expect(result.state.stage).toBe("egg");
+    }),
+  );
+});
+
+function persistPet(state: PetState): PetState {
+  return petRecordFromRow({ ...petStateToRow(state), clock_offset_ms: 0, version: 1 }).state;
+}
+
+function persistTask(task: Task): Task {
+  return taskFromRow(taskToRow(task));
+}
+
+it("P19b split catch-up through row serialization matches one catch-up", () => {
+  check(
+    fc.property(
+      arbAlivePetState,
+      fc.array(arbTask, { maxLength: 4 }),
+      fc.integer({ min: 2, max: 6 }),
+      fc.integer({ min: HOUR, max: 8 * HOUR }),
+      (state, tasks, steps, span) => {
+        const start = state.lastTickAt ?? MIN;
+        const end = start + span;
+        const once = catchUp(state, tasks, end).state;
+        let current: PetState = state;
+        let liveTasks = tasks;
+        for (let step = 1; step <= steps; step += 1) {
+          const at = step === steps ? end : start + Math.floor((span * step) / steps);
+          const caught = catchUp(current, liveTasks, at);
+          current = persistPet(caught.state);
+          liveTasks = caught.tasks.map(persistTask);
+        }
+        const whole = persistPet(once);
+        expect(current.status).toBe(whole.status);
+        expect(current.stage).toBe(whole.stage);
+        expect(current.currentStreak).toBe(whole.currentStreak);
+        expect(current.diedAt).toBe(whole.diedAt);
+        // Float noise from splitting the interval is far below 1, which is what
+        // integer rounding on each save would throw away.
+        expect(Math.abs(current.hp - whole.hp)).toBeLessThan(1e-6);
+        expect(Math.abs(current.hunger - whole.hunger)).toBeLessThan(1e-6);
+        expect(Math.abs(current.mood - whole.mood)).toBeLessThan(1e-6);
+      },
+    ),
   );
 });
 

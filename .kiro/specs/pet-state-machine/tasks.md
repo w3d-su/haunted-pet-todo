@@ -101,9 +101,9 @@
   _Requirements: 13.1 (persistence layer)_
 
 - [x] 11b. (Week 1) Anonymous sign-in demo path
-  - [x] 11b.1 `signInAnonymously()` helper and `POST /api/auth/anonymous`
+  - [x] 11b.1 Browser calls `supabase.auth.signInAnonymously()` with the anon key. Do not proxy it through a server route (Supabase's per-IP limit would stick to Vercel's IP)
   - [x] 11b.2 Local `supabase/config.toml` sets `enable_anonymous_sign_ins`. Hosted projects enable the same provider in the dashboard (Auth settings are not a SQL migration)
-  - [x] 11b.3 README documents the judge path: anonymous sign-in, bearer token, `X-Time-Zone`
+  - [x] 11b.3 README documents the browser sign-in, the bearer token, and `X-Time-Zone` on the first pet read only
     - Files: `src/lib/db/auth.ts`, `src/app/api/auth/anonymous/route.ts`, `supabase/config.toml`, `README.md`
   _Requirements: RLS needs `auth.uid()`; anonymous users are real `auth.users` rows_
 

@@ -1,9 +1,11 @@
 import {
   ADULT_STREAK_THRESHOLD,
   ADULT_TASKS_THRESHOLD,
+  DECAY_RATE_HP,
   INITIAL_HUNGER,
   INITIAL_MOOD,
   MAX_HP,
+  ZOMBIE_DRAIN_PER_HOUR,
 } from "./constants";
 import { decayStats } from "./decay";
 import type { GameEvent } from "./events";
@@ -79,6 +81,8 @@ export interface PetState {
   readonly graveyard: readonly TombstoneRecord[];
   /** Unix ms of the last processed tick. */
   readonly lastTickAt: number | null;
+  /** Unix ms when HP reached 0. Null while the pet is alive. */
+  readonly diedAt: number | null;
 }
 
 export interface PetReduction {
@@ -86,7 +90,8 @@ export interface PetReduction {
   readonly emitted: readonly GameEvent[];
 }
 
-const FALLBACK_EPITAPH = "Here lies a to-do list. It never stood a chance.";
+export const FALLBACK_EPITAPH = "Here lies a to-do list. It never stood a chance.";
+const HOUR_MS = 3_600_000;
 
 export function clampHp(value: number): number {
   return Math.min(MAX_HP, Math.max(0, value));
@@ -135,18 +140,20 @@ export function initialPetState(
     currentEpitaph: null,
     graveyard: [],
     lastTickAt: now,
+    diedAt: null,
   };
 }
 
 /**
- * Rebirth is legal only from `tombstone`. The new graveyard row uses
+ * Rebirth is legal from `dead` or `tombstone`. The graveyard id is
  * `tombstoneId` so two calls with the same inputs match (property P9).
+ * `diedAt` is when HP reached 0, not when a later read noticed it.
  */
 export function rebirthPet(state: PetState, now: number, tombstoneId: string): PetState {
-  if (state.status !== "tombstone") return state;
+  if (state.status !== "tombstone" && state.status !== "dead") return state;
   const record: TombstoneRecord = {
     id: tombstoneId,
-    diedAt: state.lastTickAt ?? now,
+    diedAt: state.diedAt ?? state.lastTickAt ?? now,
     stage: state.stage,
     finalHp: state.hp,
     finalHunger: state.hunger,
@@ -185,7 +192,7 @@ export function applyPetEvent(state: PetState, event: GameEvent, now: number): P
     return unchanged(state);
   }
 
-  if (state.status === "dead" && event.type !== "EPITAPH_READY") {
+  if (state.status === "dead" && event.type !== "EPITAPH_READY" && event.type !== "REBIRTH") {
     return unchanged(state);
   }
 
@@ -268,6 +275,28 @@ export function applyTaskCompleted(
   return { state: next, emitted };
 }
 
+/** When HP hits 0 during [from, to] at a constant hourly rate. Rounded to a millisecond. */
+export function hpReachedZeroAt(
+  from: number,
+  to: number,
+  startHp: number,
+  ratePerHour: number,
+): number {
+  if (startHp <= 0 || ratePerHour <= 0) return from;
+  const at = from + (startHp / ratePerHour) * HOUR_MS;
+  return Math.round(Math.min(to, Math.max(from, at)));
+}
+
+function markDead(state: PetState, diedAt: number): PetState {
+  return {
+    ...state,
+    hp: 0,
+    status: "dead",
+    diedAt: state.diedAt ?? diedAt,
+    currentEpitaph: state.currentEpitaph ?? FALLBACK_EPITAPH,
+  };
+}
+
 export function applyDecayTick(
   state: PetState,
   event: Extract<GameEvent, { type: "DECAY_TICK" }>,
@@ -280,7 +309,9 @@ export function applyDecayTick(
     emitted.push({ type: "STREAK_BROKEN" });
   }
   if (state.status === "alive" && decayed.hp === 0) {
-    const next = { ...decayed, status: "dead" as const };
+    const from = state.lastTickAt ?? event.toTime;
+    const rate = state.stage === "egg" ? 0 : DECAY_RATE_HP;
+    const next = markDead(decayed, hpReachedZeroAt(from, event.toTime, state.hp, rate));
     emitted.push({ type: "PET_DIED", finalState: withoutGraveyard(next) });
     return { state: next, emitted };
   }
@@ -291,22 +322,19 @@ export function applyZombieDrain(
   state: PetState,
   event: Extract<GameEvent, { type: "ZOMBIE_DRAIN" }>,
 ): PetReduction {
-  if (state.status !== "alive") return unchanged(state);
-  const hours = Math.max(0, (event.toTime - event.fromTime) / 3_600_000);
+  if (state.status !== "alive" || state.stage === "egg") return unchanged(state);
+  const hours = Math.max(0, (event.toTime - event.fromTime) / HOUR_MS);
   const damage = zombieDamage(event.zombieCount, hours);
   if (damage === 0) return unchanged(state);
 
   const hp = clampHp(state.hp - damage);
-  const next: PetState = {
-    ...state,
-    hp,
-    status: hp === 0 ? "dead" : state.status,
-  };
-  const emitted: GameEvent[] = [];
-  if (state.status === "alive" && next.status === "dead") {
-    emitted.push({ type: "PET_DIED", finalState: withoutGraveyard(next) });
-  }
-  return { state: next, emitted };
+  if (hp > 0) return { state: { ...state, hp }, emitted: [] };
+  const rate = event.zombieCount * ZOMBIE_DRAIN_PER_HOUR;
+  const next = markDead(
+    { ...state, hp: 0 },
+    hpReachedZeroAt(event.fromTime, event.toTime, state.hp, rate),
+  );
+  return { state: next, emitted: [{ type: "PET_DIED", finalState: withoutGraveyard(next) }] };
 }
 
 function applyEpitaphReady(
@@ -333,41 +361,83 @@ export interface CatchUp {
  * it was actually overdue. Read/write paths call this so a daily cron is
  * only a backstop.
  */
+function zombiesAt(tasks: readonly Task[], at: number): number {
+  let count = 0;
+  for (const task of tasks) {
+    if (task.status !== "overdue" || task.deletedAt !== null || task.dueAt === null) continue;
+    if (task.dueAt <= at) count += 1;
+  }
+  return count;
+}
+
+/**
+ * One segment where decay and zombie pressure are constant.
+ * Stats stop at the instant HP hits 0 so a later split of the same
+ * interval matches one pass (property P19b).
+ */
+function applySegment(state: PetState, from: number, to: number, zombies: number): PetReduction {
+  if (state.status !== "alive" || to <= from) return unchanged(state);
+  const hours = (to - from) / HOUR_MS;
+  const hpRate = state.stage === "egg" ? 0 : DECAY_RATE_HP + zombies * ZOMBIE_DRAIN_PER_HOUR;
+  const dies = hpRate > 0 && state.hp <= hpRate * hours;
+  const effectUntil = dies ? hpReachedZeroAt(from, to, state.hp, hpRate) : to;
+  const decayed = decayStats({ ...state, lastTickAt: from }, effectUntil);
+  const emitted: GameEvent[] = [];
+  if (state.currentStreak > 0 && decayed.currentStreak === 0) {
+    emitted.push({ type: "STREAK_BROKEN" });
+  }
+  const hp = dies ? 0 : clampHp(state.hp - hpRate * hours);
+  let next: PetState = { ...decayed, hp, lastTickAt: to };
+  if (dies) {
+    next = markDead(next, effectUntil);
+    emitted.push({ type: "PET_DIED", finalState: withoutGraveyard(next) });
+  }
+  return { state: next, emitted };
+}
+
 export function catchUp(pet: PetState, tasks: readonly Task[], now: number): CatchUp {
   const from = pet.lastTickAt ?? now;
   const marked = markNewlyOverdue(tasks, now);
-  const decayed = applyPetEvent(pet, { type: "DECAY_TICK", fromTime: from, toTime: now }, now);
+  const taskList = marked.overdueTaskIds.length === 0 ? tasks : marked.tasks;
 
-  let state = decayed.state;
-  const emitted: GameEvent[] = [...decayed.emitted];
+  if (now <= from) {
+    return { state: pet, tasks: taskList, emitted: [], overdueTaskIds: marked.overdueTaskIds };
+  }
 
-  if (state.status === "alive" && now > from) {
-    for (const task of marked.tasks) {
+  if (pet.status !== "alive") {
+    const state = (pet.lastTickAt ?? from) < now ? { ...pet, lastTickAt: now } : pet;
+    return { state, tasks: taskList, emitted: [], overdueTaskIds: marked.overdueTaskIds };
+  }
+
+  const points = new Set<number>([from, now]);
+  if (pet.stage !== "egg") {
+    for (const task of taskList) {
       if (task.status !== "overdue" || task.deletedAt !== null || task.dueAt === null) continue;
-      const drainFrom = Math.max(from, task.dueAt);
-      if (drainFrom >= now) continue;
-      const drained = applyPetEvent(
-        state,
-        { type: "ZOMBIE_DRAIN", zombieCount: 1, fromTime: drainFrom, toTime: now },
-        now,
-      );
-      state = drained.state;
-      emitted.push(...drained.emitted);
-      if (state.status !== "alive") break;
+      if (task.dueAt > from && task.dueAt < now) points.add(task.dueAt);
     }
   }
+  const ordered = [...points].sort((left, right) => left - right);
 
-  if (state !== pet && state.becameAdultAt !== null) {
-    const hoursAsAdult = Math.max(0, (now - state.becameAdultAt) / 3_600_000);
-    if (hoursAsAdult !== state.hoursAsAdult) {
-      state = { ...state, hoursAsAdult };
-    }
+  let state = pet;
+  const emitted: GameEvent[] = [];
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const segFrom = ordered[index] ?? from;
+    const segTo = ordered[index + 1] ?? now;
+    if (state.status !== "alive") break;
+    const zombies = state.stage === "egg" ? 0 : zombiesAt(taskList, segFrom);
+    const step = applySegment(state, segFrom, segTo, zombies);
+    state = step.state;
+    emitted.push(...step.emitted);
   }
 
-  return {
-    state,
-    tasks: marked.overdueTaskIds.length === 0 ? tasks : marked.tasks,
-    emitted,
-    overdueTaskIds: marked.overdueTaskIds,
-  };
+  if (state.status !== "alive" && (state.lastTickAt ?? from) < now) {
+    state = { ...state, lastTickAt: now };
+  }
+
+  if (state.becameAdultAt !== null) {
+    const hoursAsAdult = Math.max(0, (now - state.becameAdultAt) / HOUR_MS);
+    if (hoursAsAdult !== state.hoursAsAdult) state = { ...state, hoursAsAdult };
+  }
+
+  return { state, tasks: taskList, emitted, overdueTaskIds: marked.overdueTaskIds };
 }

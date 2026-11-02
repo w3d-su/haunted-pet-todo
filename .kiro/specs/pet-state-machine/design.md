@@ -379,9 +379,11 @@ See `PetState`, `TombstoneRecord`, `PetStage`, `PetStatus` above.
 | `clock_offset_ms` | `bigint` | NOT NULL, default `0`, `CHECK (>= 0)` | Demo offset added to wall time. Not a `PetState` field |
 | `stage` | `text` | NOT NULL | One of the `PetStage` literals |
 | `status` | `text` | NOT NULL, default `'alive'` | `alive` / `dead` / `tombstone` |
-| `hp` | `integer` | NOT NULL, default 100, `CHECK (hp >= 0)` | |
-| `hunger` | `integer` | NOT NULL, default 100, `CHECK (hunger BETWEEN 0 AND 100)` | |
-| `mood` | `integer` | NOT NULL, default 100, `CHECK (mood BETWEEN 0 AND 100)` | |
+| `hp` | `double precision` | NOT NULL, default 100, `CHECK (hp >= 0 AND hp <= 100)` | Do not round on write |
+| `version` | `integer` | NOT NULL, default 1 | Compare-and-swap for catch-up writes |
+| `died_at` | `timestamptz` | nullable | When HP reached 0, not when a later read noticed |
+| `hunger` | `double precision` | NOT NULL, default 100, `CHECK (hunger >= 0 AND hunger <= 100)` | Do not round on write |
+| `mood` | `double precision` | NOT NULL, default 100, `CHECK (mood >= 0 AND mood <= 100)` | Do not round on write |
 | `current_streak` | `integer` | NOT NULL, default 0 | |
 | `tasks_completed_total` | `integer` | NOT NULL, default 0 | |
 | `last_completion_at` | `timestamptz` | nullable | |

@@ -1,6 +1,12 @@
 ---
 inclusion: fileMatch
-fileMatchPattern: "src/components/**,src/app/**/*.tsx,tailwind.config.ts,src/app/globals.css"
+fileMatchPattern:
+  [
+    "src/components/**",
+    "src/app/**/*.tsx",
+    "tailwind.config.ts",
+    "src/app/globals.css",
+  ]
 ---
 
 # Haunted Pet To-Do — Visual Style Steering

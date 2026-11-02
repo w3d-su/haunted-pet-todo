@@ -58,7 +58,7 @@ _User Story_: As a user, I want to edit a task's title, notes, category, size, o
 **Acceptance Criteria**:
 
 - 3.1: WHEN a PATCH request is received for a task, THEN the system SHALL validate the body with Zod and apply only the provided fields.
-- 3.2: WHEN a task's `status` is `"done"`, THEN the system SHALL reject further status changes (other than reading).
+- 3.2: WHEN a task's `status` is `"done"`, THEN the system SHALL reject further status changes. The client may set `status` only to `"done"`. An overdue task returns to `"todo"` only when its due time moves to the future. Completion uses `UPDATE ... WHERE status <> 'done'` so a concurrent complete gets HTTP 409.
 - 3.3: IF a task's `dueAt` is updated to a future time AND `status` was `"overdue"`, THEN the system SHALL set `status` back to `"todo"` and remove its associated zombie.
 
 **Requirement 4 — Delete task**
@@ -127,7 +127,7 @@ _User Story_: As a developer, I want the system to reject completing an already-
 
 **Acceptance Criteria**:
 
-- 9.1: WHEN a `PATCH` request attempts to set `status = "done"` on a task that already has `status = "done"`, THEN the system SHALL return HTTP 409 without modifying any state.
+- 9.1: WHEN a `PATCH` request attempts to set `status = "done"` on a task that already has `status = "done"`, THEN the system SHALL return HTTP 409. The check is the conditional update itself, so two concurrent completes yield one success and one 409 and the pet is healed once.
 - 9.2: IF a `TASK_COMPLETED` event is applied via `applyPetEvent` for a task that is already `done`, THEN the system SHALL NOT change `PetState.hp`, `hunger`, or `mood`.
 
 ---

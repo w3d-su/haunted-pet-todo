@@ -8,15 +8,24 @@ const NOW = Date.UTC(2026, 6, 4, 8);
 
 it("creates an egg for a new user and stores the requested time zone", async () => {
   const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
   const response = await getPet(
     request("GET", "/api/pet", undefined, { "x-time-zone": "America/New_York" }),
-    world.deps(USER_ID, NOW),
+    deps,
   );
   expect(response.status).toBe(200);
   const body = (await response.json()) as { pet: { stage: string; timeZone: string; hp: number } };
   expect(body.pet.stage).toBe("egg");
   expect(body.pet.timeZone).toBe("America/New_York");
   expect(body.pet.hp).toBe(MAX_HP);
+
+  const later = await getPet(
+    request("GET", "/api/pet", undefined, { "x-time-zone": "UTC" }),
+    deps,
+  );
+  expect(((await later.json()) as { pet: { timeZone: string } }).pet.timeZone).toBe(
+    "America/New_York",
+  );
 });
 
 it("refuses client-supplied game events and rebirths only a tombstone", async () => {
@@ -44,7 +53,7 @@ it("refuses client-supplied game events and rebirths only a tombstone", async ()
     hp: 0,
     currentEpitaph: "Gone.",
   };
-  world.pets.set(USER_ID, { state: tombstone, clockOffsetMs: 0 });
+  world.pets.set(USER_ID, { state: tombstone, clockOffsetMs: 0, version: 1 });
   const reborn = await patchPet(request("PATCH", "/api/pet", { type: "REBIRTH" }), deps);
   expect(reborn.status).toBe(200);
   const body = (await reborn.json()) as { pet: { stage: string; status: string; hp: number; graveyard: unknown[] } };
@@ -62,7 +71,7 @@ it("applies catch-up decay from lastTickAt plus the stored offset", async () => 
     stage: "adult" as const,
     hp: MAX_HP,
   };
-  world.pets.set(USER_ID, { state, clockOffsetMs: 3 * 3_600_000 });
+  world.pets.set(USER_ID, { state, clockOffsetMs: 3 * 3_600_000, version: 1 });
   const response = await getPet(request("GET", "/api/pet"), world.deps(USER_ID, NOW));
   const body = (await response.json()) as { pet: { hp: number; lastTickAt: number } };
   expect(body.pet.hp).toBe(MAX_HP - 15);

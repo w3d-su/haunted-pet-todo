@@ -1,6 +1,8 @@
+import { petRecordFromRow, petStateToRow } from "@/lib/db/pet";
+import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 import type { PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
-import type { AppDeps, EventStore, PetStore, TaskStore } from "@/lib/server/stores";
+import type { AppDeps, EventStore, PetSnapshot, PetStore, TaskStore } from "@/lib/server/stores";
 
 export interface StoredEvent {
   userId: string;
@@ -10,24 +12,53 @@ export interface StoredEvent {
 
 export interface MemoryWorld {
   tasks: Task[];
-  pets: Map<string, { state: PetState; clockOffsetMs: number }>;
+  pets: Map<string, PetSnapshot>;
   events: StoredEvent[];
   deps: (userId: string | null, now: number) => AppDeps;
 }
 
+function persistPet(state: PetState, clockOffsetMs: number, version: number): PetState {
+  return petRecordFromRow({
+    ...petStateToRow(state),
+    clock_offset_ms: clockOffsetMs,
+    version,
+  }).state;
+}
+
+function persistTask(task: Task): Task {
+  return taskFromRow(taskToRow(task));
+}
+
 export function createMemoryWorld(): MemoryWorld {
   const tasks: Task[] = [];
-  const pets = new Map<string, { state: PetState; clockOffsetMs: number }>();
+  const pets = new Map<string, PetSnapshot>();
   const events: StoredEvent[] = [];
 
   const petStore: PetStore = {
     async get(userId) {
       return pets.get(userId) ?? null;
     },
-    async save(state) {
+    async save(state, expectedVersion) {
       const existing = pets.get(state.userId);
-      pets.set(state.userId, { state, clockOffsetMs: existing?.clockOffsetMs ?? 0 });
-      return state;
+      if (expectedVersion === 0) {
+        if (existing) return null;
+        const snapshot: PetSnapshot = {
+          state: persistPet(state, 0, 1),
+          clockOffsetMs: 0,
+          version: 1,
+        };
+        pets.set(state.userId, snapshot);
+        return snapshot;
+      }
+      if (!existing || existing.version !== expectedVersion) return null;
+      const version = existing.version + 1;
+      const snapshot: PetSnapshot = {
+        state: persistPet(state, existing.clockOffsetMs, version),
+        clockOffsetMs: existing.clockOffsetMs,
+        version,
+      };
+      pets.set(state.userId, snapshot);
+      return snapshot;
     },
   };
 
@@ -36,16 +67,25 @@ export function createMemoryWorld(): MemoryWorld {
       return tasks.filter((task) => task.userId === userId && task.deletedAt === null);
     },
     async upsertTask(task) {
+      const stored = persistTask(task);
       const index = tasks.findIndex((item) => item.id === task.id);
-      if (index === -1) tasks.push(task);
-      else tasks[index] = task;
-      return task;
+      if (index === -1) tasks.push(stored);
+      else tasks[index] = stored;
+      return stored;
+    },
+    async claimDone(task, now) {
+      const index = tasks.findIndex((item) => item.id === task.id && item.userId === task.userId);
+      const current = tasks[index];
+      if (!current || current.deletedAt !== null || current.status === "done") return null;
+      const done = persistTask({ ...task, status: "done", completedAt: now });
+      tasks[index] = done;
+      return done;
     },
     async softDeleteTask(taskId, userId, now) {
       const index = tasks.findIndex((item) => item.id === taskId && item.userId === userId);
       const task = tasks[index];
       if (!task || task.deletedAt !== null) return null;
-      const deleted = { ...task, deletedAt: now };
+      const deleted = persistTask({ ...task, deletedAt: now });
       tasks[index] = deleted;
       return deleted;
     },

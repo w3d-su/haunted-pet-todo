@@ -37,9 +37,9 @@ export const PetStateRowSchema = z.object({
   time_zone: z.string().min(1),
   stage: z.enum(PET_STAGES),
   status: z.enum(PET_STATUSES),
-  hp: z.coerce.number().int(),
-  hunger: z.coerce.number().int(),
-  mood: z.coerce.number().int(),
+  hp: z.coerce.number().min(0).max(100),
+  hunger: z.coerce.number().min(0).max(100),
+  mood: z.coerce.number().min(0).max(100),
   current_streak: z.coerce.number().int(),
   tasks_completed_total: z.coerce.number().int(),
   last_completion_at: nullableUnixMs,
@@ -51,16 +51,15 @@ export const PetStateRowSchema = z.object({
   current_epitaph: z.string().nullable(),
   graveyard: z.array(TombstoneRecordSchema),
   last_tick_at: nullableUnixMs,
+  died_at: nullableUnixMs,
   clock_offset_ms: z.coerce.number().int(),
+  version: z.coerce.number().int(),
 });
 
 export interface PetRecord {
   readonly state: PetState;
   readonly clockOffsetMs: number;
-}
-
-function floorStat(value: number, max: number): number {
-  return Math.max(0, Math.min(max, Math.floor(value)));
+  readonly version: number;
 }
 
 function toTimestamptz(ms: number | null): string | null {
@@ -75,9 +74,9 @@ export function petStateToRow(state: PetState): Record<string, unknown> {
     time_zone: state.timeZone,
     stage: state.stage,
     status: state.status,
-    hp: floorStat(state.hp, 100),
-    hunger: floorStat(state.hunger, 100),
-    mood: floorStat(state.mood, 100),
+    hp: state.hp,
+    hunger: state.hunger,
+    mood: state.mood,
     current_streak: Math.max(0, Math.floor(state.currentStreak)),
     tasks_completed_total: Math.max(0, Math.floor(state.tasksCompletedTotal)),
     last_completion_at: toTimestamptz(state.lastCompletionAt),
@@ -89,6 +88,7 @@ export function petStateToRow(state: PetState): Record<string, unknown> {
     current_epitaph: state.currentEpitaph,
     graveyard: state.graveyard,
     last_tick_at: toTimestamptz(state.lastTickAt),
+    died_at: toTimestamptz(state.diedAt),
   };
 }
 
@@ -100,6 +100,7 @@ export function petRecordFromRow(row: unknown): PetRecord {
   }));
   return {
     clockOffsetMs: parsed.clock_offset_ms,
+    version: parsed.version,
     state: {
       id: parsed.id,
       userId: parsed.user_id,
@@ -120,6 +121,7 @@ export function petRecordFromRow(row: unknown): PetRecord {
       currentEpitaph: parsed.current_epitaph,
       graveyard,
       lastTickAt: parsed.last_tick_at,
+      diedAt: parsed.died_at,
     },
   };
 }
@@ -151,15 +153,37 @@ export async function getPetState(
 }
 
 /**
- * Upsert the pet row. `clock_offset_ms` is omitted so a save does not
- * reset the demo offset (column default 0 applies only on insert).
+ * Insert when `expectedVersion` is 0, otherwise compare-and-swap on `version`.
+ * `clock_offset_ms` is omitted so a save does not reset the demo offset.
+ * Returns null when another writer won the version check.
  */
-export async function savePetState(supabase: SupabaseClient, state: PetState): Promise<PetState> {
-  const { data, error } = await supabase
+export async function savePetState(
+  supabase: SupabaseClient,
+  state: PetState,
+  expectedVersion: number,
+): Promise<PetRecord | null> {
+  if (expectedVersion === 0) {
+    const inserted = await supabase
+      .from("pet_state")
+      .insert({ ...petStateToRow(state), version: 1 })
+      .select("*")
+      .single();
+    if (inserted.error) {
+      if (inserted.error.code === "23505") return null;
+      throw new Error(inserted.error.message);
+    }
+    return petRecordFromRow(inserted.data);
+  }
+
+  const updated = await supabase
     .from("pet_state")
-    .upsert(petStateToRow(state), { onConflict: "id" })
+    .update({ ...petStateToRow(state), version: expectedVersion + 1 })
+    .eq("id", state.id)
+    .eq("user_id", state.userId)
+    .eq("version", expectedVersion)
     .select("*")
-    .single();
-  throwOnError(error);
-  return petRecordFromRow(data).state;
+    .maybeSingle();
+  throwOnError(updated.error);
+  if (!updated.data) return null;
+  return petRecordFromRow(updated.data);
 }

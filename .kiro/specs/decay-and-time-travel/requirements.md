@@ -118,7 +118,7 @@ _User Story_: As a demo presenter, I want to advance the in-game clock by 1 hour
 
 - 7.1: WHEN `POST /api/demo/fast-forward` is called AND the server env `DEMO_MODE !== "true"`, OR the caller is not signed in, THEN the system SHALL return HTTP 403 and SHALL NOT change state.
 - 7.2: WHEN `POST /api/demo/fast-forward` is called with `{ hours: N }` where N ∈ {1, 6, 24}, THEN the system SHALL add `N * 3_600_000` to that user's `pet_state.clock_offset_ms`, then run the same catch-up as a normal read (`effectiveNow = wall clock + offset`). It SHALL NOT write `lastTickAt` beyond that effective time.
-- 7.3: WHEN `POST /api/demo/fast-forward` is called with `{ reset: true }`, THEN the system SHALL reset the clock offset to 0.
+- 7.3: WHEN `POST /api/demo/fast-forward` is called with `{ reset: true }`, THEN the system SHALL set `clock_offset_ms` to 0 AND clamp `lastTickAt` and any other stored game timestamps that would still be in the future relative to the new effective now down to that now. Resetting the offset alone leaves `now < lastTickAt`, and decay then no-ops.
 - 7.4: WHEN fast-forwarding N hours, THEN the system SHALL produce the same `PetState` as if the real cron had fired N times (Property P20).
 - 7.5: WHEN `POST /api/demo/fast-forward` is called, THEN the system SHALL validate the request body with Zod.
 

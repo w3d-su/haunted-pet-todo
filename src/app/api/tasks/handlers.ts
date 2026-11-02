@@ -3,7 +3,6 @@ import { applyPetEvent } from "@/lib/game/pet";
 import {
   TASK_CATEGORIES,
   TASK_SIZES,
-  TASK_STATUSES,
   isOverdue,
   makeTaskCompletedEvent,
   type Task,
@@ -32,7 +31,7 @@ const PatchTaskBodySchema = z
     category: z.enum(TASK_CATEGORIES).optional(),
     size: z.enum(TASK_SIZES).optional(),
     dueAt: z.number().int().nullable().optional(),
-    status: z.enum(TASK_STATUSES).optional(),
+    status: z.literal("done").optional(),
     sortOrder: z.number().int().optional(),
   })
   .strict();
@@ -101,7 +100,7 @@ export async function postTask(request: Request, deps: AppDeps): Promise<Respons
     );
     if (parsed.data.parentId) {
       const parent = world.tasks.find((task) => task.id === parsed.data.parentId);
-      if (!parent) return notFound("Parent task not found");
+      if (!parent || parent.userId !== stores.userId) return notFound("Parent task not found");
     }
 
     const sortOrder = world.tasks.reduce((max, task) => Math.max(max, task.sortOrder), 0) + 1;
@@ -180,14 +179,10 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
       if (
         current.status === "overdue" &&
         parsed.data.dueAt !== null &&
-        parsed.data.dueAt > world.now &&
-        parsed.data.status === undefined
+        parsed.data.dueAt > world.now
       ) {
         next = { ...next, status: "todo" };
       }
-    }
-    if (parsed.data.status === "todo" || parsed.data.status === "overdue") {
-      next = { ...next, status: parsed.data.status };
     }
 
     const saved = await stores.tasks.upsertTask(next);
@@ -212,10 +207,26 @@ async function completeTask(
   if (patch.dueAt !== undefined) task = { ...task, dueAt: patch.dueAt };
 
   const event = makeTaskCompletedEvent(task, world.now);
-  const reduction = applyPetEvent(world.pet, event, world.now);
-  await stores.pets.save(reduction.state);
-  const done: Task = { ...task, status: "done", completedAt: world.now };
-  const saved = await stores.tasks.upsertTask(done);
+  const claimed = await stores.tasks.claimDone(task, world.now);
+  if (!claimed) return conflict("Task is already done");
+
+  let pet = world.pet;
+  let version = world.version;
+  let savedPet = pet;
+  let reduction = applyPetEvent(pet, event, world.now);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    reduction = applyPetEvent(pet, event, world.now);
+    const saved = await stores.pets.save(reduction.state, version);
+    if (saved) {
+      savedPet = saved.state;
+      break;
+    }
+    const fresh = await stores.pets.get(stores.userId);
+    if (!fresh || attempt === 2) throw new Error("pet_state version conflict");
+    pet = fresh.state;
+    version = fresh.version;
+  }
+
   await stores.events.appendEvent(stores.userId, "TASK_COMPLETED", { ...event, at: world.now });
   if (event.wasOverdue) {
     await stores.events.appendEvent(stores.userId, "ZOMBIE_SLAIN", {
@@ -226,7 +237,7 @@ async function completeTask(
   for (const emitted of reduction.emitted) {
     await stores.events.appendEvent(stores.userId, emitted.type, { ...emitted, at: world.now });
   }
-  return json({ task: saved, pet: reduction.state });
+  return json({ task: claimed, pet: savedPet });
 }
 
 export async function deleteTask(request: Request, deps: AppDeps): Promise<Response> {

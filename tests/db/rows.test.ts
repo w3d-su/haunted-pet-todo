@@ -20,18 +20,20 @@ it("maps a pet row and floors stats for storage", () => {
     clockOffsetIgnored: true,
   };
   const row = petStateToRow(state);
-  expect(row.hp).toBe(10);
-  expect(row.hunger).toBe(20);
-  expect(row.mood).toBe(30);
+  expect(row.hp).toBe(10.9);
+  expect(row.hunger).toBe(20.2);
+  expect(row.mood).toBe(30.8);
   expect(row.time_zone).toBe("America/New_York");
   expect(row).not.toHaveProperty("clock_offset_ms");
 
   const stored = {
     ...row,
     clock_offset_ms: 90,
-    hp: 10,
-    hunger: 20,
-    mood: 30,
+    hp: 10.9,
+    hunger: 20.2,
+    mood: 30.8,
+    died_at: null,
+    version: 1,
     current_streak: 2,
     tasks_completed_total: 0,
     hours_as_adult: 0,

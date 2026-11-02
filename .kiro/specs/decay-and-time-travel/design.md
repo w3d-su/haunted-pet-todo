@@ -340,7 +340,7 @@ stateDiagram-v2
 | Fast-forward with invalid `hours` | Zod validation → HTTP 400 |
 | Push send failure | Log error, continue cron job, return 200 |
 | `OffsetClock.advance(negative)` | Throws `Error("OffsetClock cannot go backwards")` — callers must guard |
-| Stats float rounding | All values truncated via `Math.max(0, Math.floor(value))` before storage |
+| Stats float rounding | Store `hp`, `hunger`, and `mood` as `double precision`. Do not round on write; rounding is a UI concern. Property P19b checks that split catch-up through that serialization matches one catch-up |
 
 ---
 

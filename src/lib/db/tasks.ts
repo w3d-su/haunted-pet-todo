@@ -108,6 +108,29 @@ export async function upsertTask(supabase: SupabaseClient, task: Task): Promise<
   return taskFromRow(data);
 }
 
+/**
+ * One winner: `status <> 'done'` in the same update. A concurrent complete gets null.
+ */
+export async function claimDone(
+  supabase: SupabaseClient,
+  task: Task,
+  now: number,
+): Promise<Task | null> {
+  const done: Task = { ...task, status: "done", completedAt: now };
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(taskToRow(done))
+    .eq("id", task.id)
+    .eq("user_id", task.userId)
+    .neq("status", "done")
+    .is("deleted_at", null)
+    .select("*")
+    .maybeSingle();
+  throwOnError(error);
+  if (!data) return null;
+  return taskFromRow(data);
+}
+
 export async function softDeleteTask(
   supabase: SupabaseClient,
   taskId: string,

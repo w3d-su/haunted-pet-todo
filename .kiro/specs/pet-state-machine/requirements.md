@@ -41,7 +41,7 @@ _User Story_: As a user starting the app for the first time (or after a rebirth)
 **Acceptance Criteria**:
 
 - 1.1: WHEN a new pet is created OR WHEN a rebirth event is applied, THEN the system SHALL set `PetState.stage` to `"egg"` and `PetState.status` to `"alive"`.
-- 1.2: WHEN `PetState.stage` is `"egg"`, THEN the system SHALL NOT allow any stat decay to reduce `hp` below its initial full value until the egg hatches.
+- 1.2: WHEN `PetState.stage` is `"egg"`, THEN the system SHALL NOT decay HP and SHALL NOT apply zombie damage. An overdue task left over from a previous life does not hurt a new egg.
 - 1.3: WHEN `PetState.stage` is `"egg"`, THEN the system SHALL render `egg_idle.png` and SHALL NOT display stat bars.
 
 **Requirement 2 — Hatchling stage**
@@ -72,7 +72,7 @@ _User Story_: As a user with a long completion streak, I want my pet to evolve i
 
 - 4.1: WHEN `PetState.currentStreak >= 10` AND `PetState.stage` is `"adult"` AND `PetState.hoursAsAdult >= 24`, THEN the system SHALL be eligible to evolve.
 - 4.2: WHEN evolution is triggered AND the majority of the last 10 completed tasks were completed between 22:00–05:59 local time, THEN the system SHALL set `PetState.stage` to `"adult_night_owl"`.
-- 4.3: WHEN evolution is triggered AND the majority of the last 10 completed tasks were completed between 05:00–10:59 local time, THEN the system SHALL set `PetState.stage` to `"adult_early_bird"`.
+- 4.3: WHEN evolution is triggered AND the majority of the last 10 completed tasks were completed between 06:00–10:59 local time, THEN the system SHALL set `PetState.stage` to `"adult_early_bird"`. 05:00–05:59 counts as night owl only, so the two time-of-day forms do not share an hour.
 - 4.4: WHEN evolution is triggered AND the majority of the last 10 completed tasks had `category = "study"` OR `category = "work"`, THEN the system SHALL set `PetState.stage` to `"adult_scholar"`.
 - 4.5: WHEN evolution is triggered AND none of criteria 4.2–4.4 match (or the pattern is a tie, or there is no history), THEN the system SHALL set `PetState.stage` to `"adult_haunter"`. Majority means a strict majority: `floor(n / 2) + 1`. `n === 0` is haunter. A 5–5 split is not a majority.
 - 4.6: WHEN `PetState.stage` changes to any evolved form, THEN the system SHALL emit a `PET_EVOLVED` event containing the new stage.

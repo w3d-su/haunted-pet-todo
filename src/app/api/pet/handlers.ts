@@ -37,10 +37,9 @@ export async function patchPet(request: Request, deps: AppDeps): Promise<Respons
     if (!parsed.success) return badRequest(parsed.error);
 
     if ("timeZone" in parsed.data) {
-      const header = parsed.data.timeZone;
-      const world = await syncWorld(stores, deps.now(), header, deps.newId);
-      if (world.pet.timeZone !== header) {
-        return json({ error: "Unknown time zone" }, 400);
+      const world = await syncWorld(stores, deps.now(), null, deps.newId);
+      if (world.pet.timeZone !== parsed.data.timeZone) {
+        return conflict("Time zone is fixed when the pet is created");
       }
       return json({ pet: world.pet });
     }
@@ -51,15 +50,16 @@ export async function patchPet(request: Request, deps: AppDeps): Promise<Respons
       request.headers.get("x-time-zone"),
       deps.newId,
     );
-    if (world.pet.status !== "tombstone") {
-      return conflict("Rebirth is only available from a tombstone");
+    if (world.pet.status !== "tombstone" && world.pet.status !== "dead") {
+      return conflict("Rebirth is only available after the pet has died");
     }
     const reduction = applyPetEvent(
       world.pet,
       { type: "REBIRTH", tombstoneId: deps.newId() },
       world.now,
     );
-    await stores.pets.save(reduction.state);
+    const saved = await stores.pets.save(reduction.state, world.version);
+    if (!saved) return conflict("Pet changed while rebirth was saving");
     await stores.events.appendEvent(stores.userId, "REBIRTH", {
       tombstoneId: reduction.state.graveyard.at(-1)?.id ?? null,
       at: world.now,

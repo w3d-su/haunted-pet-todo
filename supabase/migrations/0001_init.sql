@@ -58,9 +58,9 @@ create table public.pet_state (
   ),
   status text not null default 'alive'
     check (status in ('alive', 'dead', 'tombstone')),
-  hp integer not null default 100 check (hp >= 0 and hp <= 100),
-  hunger integer not null default 100 check (hunger between 0 and 100),
-  mood integer not null default 100 check (mood between 0 and 100),
+  hp double precision not null default 100 check (hp >= 0 and hp <= 100),
+  hunger double precision not null default 100 check (hunger >= 0 and hunger <= 100),
+  mood double precision not null default 100 check (mood >= 0 and mood <= 100),
   current_streak integer not null default 0 check (current_streak >= 0),
   tasks_completed_total integer not null default 0 check (tasks_completed_total >= 0),
   last_completion_at timestamptz,
@@ -72,7 +72,9 @@ create table public.pet_state (
   current_epitaph text,
   graveyard jsonb not null default '[]'::jsonb,
   last_tick_at timestamptz,
+  died_at timestamptz,
   clock_offset_ms bigint not null default 0 check (clock_offset_ms >= 0),
+  version integer not null default 1 check (version >= 1),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -80,9 +82,10 @@ create table public.pet_state (
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
-  new.updated_at = now();
+  new.updated_at = pg_catalog.now();
   return new;
 end;
 $$;

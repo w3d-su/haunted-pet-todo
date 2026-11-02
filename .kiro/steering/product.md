@@ -60,7 +60,7 @@ The canonical stage names used everywhere in code, database, and UI:
 | `hatchling` | Hatchling | First task completed |
 | `adult` | Adult | 7+ tasks completed total, streak ≥ 3 |
 | `adult_night_owl` | Night Owl | Evolved; majority of last 10 completions between 22:00–05:59 |
-| `adult_early_bird` | Early Bird | Evolved; majority of last 10 completions between 05:00–10:59 |
+| `adult_early_bird` | Early Bird | Evolved; majority of last 10 completions between 06:00–10:59. 05:00–05:59 counts as night owl |
 | `adult_scholar` | Scholar | Evolved; majority of last 10 completions in `study` or `work` category |
 | `adult_haunter` | Haunter | Evolved; default form when no other criterion is met |
 

@@ -26,6 +26,11 @@ const eslintConfig = [
           message:
             "src/lib/game must not call new Date(). Pass a now: number or a Clock.",
         },
+        {
+          selector: "MemberExpression[object.name='globalThis'][property.name='Date']",
+          message:
+            "src/lib/game must not reference globalThis.Date. Pass a now: number or a Clock.",
+        },
       ],
     },
   },

@@ -24,13 +24,20 @@ The SQL in `supabase/migrations/` is the schema (`tasks`, `events`, `pet_state`)
 2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Leave the service-role key out of the client. Do not commit `.env.local`.
 3. Enable **Anonymous sign-ins** in the dashboard (Authentication → Sign In / Providers). A SQL migration cannot toggle that Auth setting. For local `supabase start`, `supabase/config.toml` sets `enable_anonymous_sign_ins = true` (keep that flag if you regenerate the file with `supabase init`).
 4. Apply the migrations: `pnpm db:migrate` (`supabase db push`). `pnpm db:types` regenerates TypeScript types once the CLI is linked.
-5. Sign in without a password:
+5. Sign in from the browser. Do not proxy this through the server: Supabase limits anonymous sign-ins per IP (30/hour), and a server route would spend that budget on Vercel's address. Turnstile or another captcha is the later hardening step; it is not wired up yet.
 
-```sh
-curl -s -X POST http://localhost:3000/api/auth/anonymous
+```ts
+import { createClient } from "@supabase/supabase-js";
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+);
+const { data, error } = await supabase.auth.signInAnonymously();
+const accessToken = data.session?.access_token;
 ```
 
-The response has `userId` and `accessToken`. Send `Authorization: Bearer <accessToken>` on later calls. Send `X-Time-Zone: America/New_York` (any IANA name) on the first `GET /api/pet` so evolution and streaks use that zone instead of UTC.
+Send `Authorization: Bearer <accessToken>` on API calls. Send `X-Time-Zone: America/New_York` (any IANA name) on the **first** `GET /api/pet`. The zone is fixed at creation; later headers are ignored.
 
 ```sh
 curl -s http://localhost:3000/api/pet \
@@ -45,7 +52,9 @@ curl -s -X POST http://localhost:3000/api/tasks \
 
 Row Level Security uses `auth.uid()`. Anonymous users are real `auth.users` rows, so the same policies apply. The user-scoped API uses the anon key plus that JWT. It does not use the service role.
 
-Decay runs when a pet or task route reads or writes, from `lastTickAt` to now. `vercel.json` schedules `/api/cron/decay` once a day (`0 8 * * *`) as a backstop. Vercel Hobby rejects an hourly cron. The cron handler itself is not in this slice.
+Decay runs when a pet or task route reads or writes, from `lastTickAt` to now. Stats are stored as double precision so a polling client does not floor away the fraction on every read. The daily cron entry stays out of `vercel.json` until `/api/cron/decay` exists. Vercel Hobby would reject an hourly schedule anyway.
+
+Authenticated database roles can select their own rows and cannot write. The API writes with `SUPABASE_SERVICE_ROLE_KEY`.
 
 `DEMO_MODE=true` (server-only, not `NEXT_PUBLIC_`) is reserved for fast-forward. The column `pet_state.clock_offset_ms` stores a per-user offset added to wall time. Nothing in this slice writes it.
 
