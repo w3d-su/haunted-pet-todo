@@ -13,20 +13,26 @@ export class SupabaseConfigError extends Error {
   }
 }
 
-export function readSupabaseEnv(): { url: string; anonKey: string } {
+export function readSupabaseEnvSafe(): { url: string; anonKey: string } | null {
   const parsed = SupabaseEnvSchema.safeParse({
     NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   });
-  if (!parsed.success) {
-    throw new SupabaseConfigError(
-      "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY. See README.",
-    );
-  }
+  if (!parsed.success) return null;
   return {
     url: parsed.data.NEXT_PUBLIC_SUPABASE_URL,
     anonKey: parsed.data.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   };
+}
+
+export function readSupabaseEnv(): { url: string; anonKey: string } {
+  const env = readSupabaseEnvSafe();
+  if (!env) {
+    throw new SupabaseConfigError(
+      "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY. See README.",
+    );
+  }
+  return env;
 }
 
 /** User-scoped client. The bearer token is the signed-in (or anonymous) user's JWT, so RLS applies. */

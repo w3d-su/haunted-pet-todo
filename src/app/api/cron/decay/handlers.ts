@@ -29,15 +29,21 @@ export async function runDecayCron(request: Request, deps: CronDeps): Promise<Re
     const userIds = await deps.listUserIds();
     let processed = 0;
     let deaths = 0;
+    let failures = 0;
     for (const userId of userIds) {
-      const stores = await deps.storesFor(userId);
-      const before = await stores.pets.get(userId);
-      if (!before) continue;
-      const world = await syncWorld(stores, deps.now(), null, deps.newId);
-      processed += 1;
-      if (before.state.status === "alive" && world.pet.status === "dead") deaths += 1;
+      try {
+        const stores = await deps.storesFor(userId);
+        const before = await stores.pets.get(userId);
+        if (!before) continue;
+        const world = await syncWorld(stores, deps.now(), null, deps.newId);
+        processed += 1;
+        if (before.state.status === "alive" && world.pet.status === "dead") deaths += 1;
+      } catch (error) {
+        console.error(error);
+        failures += 1;
+      }
     }
-    return json({ processed, deaths });
+    return json({ processed, deaths, failures });
   } catch (error) {
     return storageFailure(error);
   }

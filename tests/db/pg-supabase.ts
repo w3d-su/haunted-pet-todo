@@ -59,6 +59,7 @@ class Query implements PromiseLike<Result> {
   private values: Record<string, unknown> = {};
   private filters: Filter[] = [];
   private orderBy: { column: string; ascending: boolean } | null = null;
+  private rangeBounds: { from: number; to: number } | null = null;
   private onConflict: string | null = null;
   private expectation: Expectation = "many";
 
@@ -114,6 +115,12 @@ class Query implements PromiseLike<Result> {
     return this;
   }
 
+  /** Inclusive, matching PostgREST `.range(from, to)`. */
+  range(from: number, to: number): this {
+    this.rangeBounds = { from, to };
+    return this;
+  }
+
   maybeSingle(): Promise<Result> {
     this.expectation = "maybe";
     return this.execute();
@@ -157,6 +164,10 @@ class Query implements PromiseLike<Result> {
       if (where) sql += ` where ${where}`;
       if (this.orderBy) {
         sql += ` order by ${ident(this.orderBy.column)} ${this.orderBy.ascending ? "asc" : "desc"}`;
+      }
+      if (this.rangeBounds) {
+        const span = this.rangeBounds.to - this.rangeBounds.from + 1;
+        sql += ` offset ${placeholder("_offset", this.rangeBounds.from)} limit ${placeholder("_limit", span)}`;
       }
     } else if (this.action === "update") {
       const assignments = entries.map(

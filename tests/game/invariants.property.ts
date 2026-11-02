@@ -3,12 +3,13 @@ import { expect, it } from "vitest";
 import { OffsetClock } from "@/lib/game/clock";
 import { MAX_HP, ZOMBIE_DRAIN_PER_HOUR } from "@/lib/game/constants";
 import { decayStats } from "@/lib/game/decay";
-import { resolveEvolvedForm } from "@/lib/game/evolution";
+import { calendarDay, resolveEvolvedForm } from "@/lib/game/evolution";
 import { petRecordFromRow, petStateToRow } from "@/lib/db/pet";
 import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 import {
   applyPetEvent,
   catchUp,
+  clampFuturePetTimes,
   clampStats,
   rebirthPet,
   runOneTick,
@@ -582,6 +583,40 @@ it("P20 N hourly ticks match one N-hour tick", () => {
           expect(Math.abs(quietTick.hunger - decayed.hunger)).toBeLessThanOrEqual(1);
           expect(Math.abs(quietTick.mood - decayed.mood)).toBeLessThanOrEqual(1);
         }
+      },
+    ),
+  );
+});
+
+it("reset pulls lastCompletionDay back with the completion instant", () => {
+  check(
+    fc.property(
+      arbAlivePetState,
+      fc.integer({ min: HOUR, max: 10 * 24 * HOUR }),
+      (state, ahead) => {
+        const now = state.lastTickAt ?? MIN;
+        const shifted = {
+          ...state,
+          status: "alive" as const,
+          lastCompletionAt: now + ahead,
+          lastCompletionDay: "2099-12-31",
+          currentStreak: 4,
+        };
+        const clamped = clampFuturePetTimes(shifted, now);
+        expect(clamped.lastCompletionAt).toBe(now);
+        expect(clamped.lastCompletionDay).toBe(calendarDay(now, state.timeZone));
+        const done = applyPetEvent(
+          clamped,
+          {
+            type: "TASK_COMPLETED",
+            taskId: "fresh-task-after-reset",
+            wasOverdue: false,
+            category: "chores",
+            completedAt: now,
+          },
+          now,
+        );
+        expect(done.state.currentStreak).toBe(clamped.currentStreak);
       },
     ),
   );

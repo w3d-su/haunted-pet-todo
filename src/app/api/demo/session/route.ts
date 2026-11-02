@@ -1,12 +1,11 @@
-import { DEMO_COOKIE, demoUserFromRequest } from "@/lib/server/demo-store";
-import { demoModeEnabled } from "@/lib/server/env";
+import { demoCookieHeader, demoUserFromRequest, memoryDemoAllowed } from "@/lib/server/demo-store";
 import { json } from "@/lib/server/http";
 
-/** HttpOnly demo user. Only issued when the server has DEMO_MODE=true. */
+/** Signed HttpOnly demo user. Only when demo mode is on and Supabase is not configured. */
 export async function POST(request: Request): Promise<Response> {
-  if (!demoModeEnabled()) return json({ error: "Forbidden" }, 403);
+  if (!memoryDemoAllowed()) return json({ error: "Forbidden" }, 403);
   const userId = demoUserFromRequest(request) ?? crypto.randomUUID();
   return json({ userId }, 200, {
-    "set-cookie": `${DEMO_COOKIE}=${userId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800`,
+    "set-cookie": demoCookieHeader(userId),
   });
 }

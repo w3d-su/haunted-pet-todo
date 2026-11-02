@@ -1,6 +1,8 @@
 import { HauntApp } from "@/components/providers/HauntApp";
 import { demoModeEnabled } from "@/lib/server/env";
 
+export const dynamic = "force-dynamic";
+
 function Landing() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg-void px-6 py-16 text-ghost-white">

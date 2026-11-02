@@ -178,7 +178,7 @@ export function createMemoryWorld(): MemoryWorld {
                     state = clampFuturePetTimes(state, shift.clampTo);
                     for (let index = 0; index < tasks.length; index += 1) {
                       const task = tasks[index];
-                      if (!task || task.userId !== id) continue;
+                      if (!task || task.userId !== id || task.status === "done") continue;
                       tasks[index] = persistTask(clampFutureTaskTimes(task, shift.clampTo));
                     }
                   }

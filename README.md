@@ -52,13 +52,13 @@ curl -s -X POST http://localhost:3000/api/tasks \
 
 Row Level Security uses `auth.uid()`. Anonymous users are real `auth.users` rows, so the same policies apply. The user-scoped API uses the anon key plus that JWT. It does not use the service role.
 
-Decay runs when a pet or task route reads or writes, from `lastTickAt` to now. Stats are stored as double precision so a polling client does not floor away the fraction on every read. `vercel.json` schedules `GET /api/cron/decay` once a day (`0 8 * * *`). Vercel Hobby rejects an hourly cron. The route requires `Authorization: Bearer $CRON_SECRET` and compares that secret in constant time.
+Decay runs when a pet or task route reads or writes, from `lastTickAt` to now. Stats are stored as double precision so a polling client does not floor away the fraction on every read. `vercel.json` schedules `GET /api/cron/decay` once a day (`0 8 * * *`). That is 08:00 UTC, which is 16:00 in Taipei, not 08:00 Taipei. Vercel Hobby rejects an hourly cron. The route requires `Authorization: Bearer $CRON_SECRET` and compares that secret in constant time.
 
 Authenticated database roles can select their own rows and cannot write. The API writes with `SUPABASE_SERVICE_ROLE_KEY`.
 
 `events.seq` is a `bigint generated always as identity`. The timeline is ordered by `seq`, so rows that share a `created_at` stay in insert order.
 
-`DEMO_MODE=true` (server-only, not `NEXT_PUBLIC_`) allows `POST /api/demo/fast-forward`. That adds `1`, `6`, or `24` hours to `pet_state.clock_offset_ms`, then runs the same catch-up as a read. Reset sets the offset to 0 and pulls future clock cursors back to wall time. Due dates are left alone. With demo mode on and no Supabase env, the home page issues an httpOnly demo cookie and keeps that browser's pet in memory so the loop can be played locally. A configured Supabase project still signs the browser in anonymously, and writes still use the service role.
+`DEMO_MODE=true` (server-only, not `NEXT_PUBLIC_`) allows `POST /api/demo/fast-forward`. That adds `1`, `6`, or `24` hours to `pet_state.clock_offset_ms`, then runs the same catch-up as a read. Reset sets the offset to 0 and pulls future clock cursors, including the completion day, back to wall time. Due dates are left alone. The in-memory demo is used only when demo mode is on and Supabase is not configured. The session cookie is HttpOnly, Secure, and HMAC-signed, and one process keeps at most 32 demo users. A configured Supabase project signs the browser in anonymously and does not fall back to that memory store. Writes still use the service role.
 
 ## Database concurrency tests
 

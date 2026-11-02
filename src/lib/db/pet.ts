@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { clampFutureTaskTimes } from "@/lib/game/tasks";
+import { clampStoredTaskTimes } from "@/lib/db/tasks";
 import {
   clampFuturePetTimes,
   PET_STAGES,
@@ -8,7 +8,6 @@ import {
   type PetState,
   type TombstoneRecord,
 } from "@/lib/game/pet";
-import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 
 const TombstoneRecordSchema = z.object({
   id: z.string().min(1),
@@ -194,14 +193,25 @@ export async function savePetState(
   return petRecordFromRow(updated.data);
 }
 
-/** Every pet row. The cron walks these with the service role. */
+const PET_PAGE = 1000;
+
+/** Every pet row, one page at a time. PostgREST stops a bare select at 1000. */
 export async function listPetUserIds(supabase: SupabaseClient): Promise<string[]> {
-  const { data, error } = await supabase.from("pet_state").select("user_id");
-  throwOnError(error);
-  return z
-    .array(z.object({ user_id: z.uuid() }))
-    .parse(data ?? [])
-    .map((row) => row.user_id);
+  const ids: string[] = [];
+  for (let from = 0; ; from += PET_PAGE) {
+    const { data, error } = await supabase
+      .from("pet_state")
+      .select("user_id")
+      .order("user_id", { ascending: true })
+      .range(from, from + PET_PAGE - 1);
+    throwOnError(error);
+    const page = z
+      .array(z.object({ user_id: z.uuid() }))
+      .parse(data ?? [])
+      .map((row) => row.user_id);
+    ids.push(...page);
+    if (page.length < PET_PAGE) return ids;
+  }
 }
 
 /**
@@ -221,21 +231,7 @@ export async function setClockOffset(
   const current = await getPetRecord(supabase, userId);
   if (!current) return null;
   const state = clampTo === null ? current.state : clampFuturePetTimes(current.state, clampTo);
-  if (clampTo !== null) {
-    const listed = await supabase.from("tasks").select("*").eq("user_id", userId);
-    throwOnError(listed.error);
-    const tasks = z.array(z.unknown()).parse(listed.data ?? []).map((row) => taskFromRow(row));
-    for (const task of tasks) {
-      const next = clampFutureTaskTimes(task, clampTo);
-      if (next === task) continue;
-      const written = await supabase
-        .from("tasks")
-        .update(taskToRow(next))
-        .eq("id", task.id)
-        .eq("user_id", userId);
-      throwOnError(written.error);
-    }
-  }
+  if (clampTo !== null) await clampStoredTaskTimes(supabase, userId, clampTo);
   const updated = await supabase
     .from("pet_state")
     .update({

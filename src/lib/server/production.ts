@@ -4,7 +4,7 @@ import { getPetRecord, savePetState, setClockOffset } from "@/lib/db/pet";
 import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
 import { bearerToken, createServiceClient, createUserClient } from "@/lib/db/client";
 import { userIdFromAccessToken } from "@/lib/db/auth";
-import { authorizeDemo } from "@/lib/server/demo-store";
+import { authorizeDemo, memoryDemoAllowed } from "@/lib/server/demo-store";
 import { demoModeEnabled } from "@/lib/server/env";
 import { SystemClock } from "@/lib/server/clock";
 import type { AppDeps, AuthedStores } from "@/lib/server/stores";
@@ -69,7 +69,7 @@ export function productionDeps(): AppDeps {
             setClockOffset(writer, id, shift.clockOffsetMs, shift.clampTo),
         };
       }
-      if (!demoModeEnabled()) return null;
+      if (!memoryDemoAllowed()) return null;
       return authorizeDemo(request);
     },
   };

@@ -36,6 +36,11 @@ function markDone(tasks: readonly TaskView[], id: string): TaskView[] {
   }));
 }
 
+function supabaseConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+}
+
+/** Throws when sign-in fails. Callers must not fall through to the memory demo. */
 async function bearerFromSupabase(): Promise<Record<string, string>> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -49,8 +54,11 @@ async function bearerFromSupabase(): Promise<Record<string, string>> {
   if (!token) {
     const signed = await supabase.auth.signInAnonymously();
     token = signed.data.session?.access_token;
+    if (signed.error || !token) {
+      throw new Error(signed.error?.message ?? "Sign-in failed. Try again.");
+    }
   }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return { Authorization: `Bearer ${token}` };
 }
 
 export function GameStateProvider({
@@ -101,14 +109,15 @@ export function GameStateProvider({
     let cancelled = false;
     async function boot() {
       try {
-        if (demoMode) {
+        if (supabaseConfigured()) {
+          headersRef.current = await bearerFromSupabase();
+        } else if (demoMode) {
           const session = await fetch("/api/demo/session", {
             method: "POST",
             credentials: "same-origin",
           });
           if (!session.ok) throw new Error("Demo mode is locked.");
         }
-        headersRef.current = await bearerFromSupabase();
         if (!cancelled) await refresh();
         if (!cancelled) setError(null);
       } catch (cause) {

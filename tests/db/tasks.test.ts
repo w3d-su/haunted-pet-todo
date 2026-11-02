@@ -127,6 +127,10 @@ describeDb("postgres task helpers, seq, and cron", () => {
        where table_schema = 'public' and table_name = 'events' and column_name = 'seq'`,
     );
     expect(identity.rows[0]).toEqual({ is_identity: "YES", identity_generation: "ALWAYS" });
+    const usage = await pool.query<{ ok: boolean }>(
+      "select has_sequence_privilege('authenticated', 'public.events_seq_seq', 'USAGE') as ok",
+    );
+    expect(usage.rows[0]?.ok).toBe(false);
   });
 
   it("does not let the authenticated role write events", async () => {

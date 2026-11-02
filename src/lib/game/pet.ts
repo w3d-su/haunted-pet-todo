@@ -461,9 +461,14 @@ export function clampFuturePetTimes(state: PetState, now: number): PetState {
   const recentUnchanged = recentCompletionTimestamps.every(
     (stamp, index) => stamp === state.recentCompletionTimestamps[index],
   );
+  const lastCompletionDay =
+    lastCompletionAt !== null && lastCompletionAt !== state.lastCompletionAt
+      ? calendarDay(lastCompletionAt, state.timeZone)
+      : state.lastCompletionDay;
   if (
     lastTickAt === state.lastTickAt &&
     lastCompletionAt === state.lastCompletionAt &&
+    lastCompletionDay === state.lastCompletionDay &&
     becameAdultAt === state.becameAdultAt &&
     diedAt === state.diedAt &&
     recentUnchanged
@@ -474,6 +479,7 @@ export function clampFuturePetTimes(state: PetState, now: number): PetState {
     ...state,
     lastTickAt,
     lastCompletionAt,
+    lastCompletionDay,
     becameAdultAt,
     diedAt,
     recentCompletionTimestamps,

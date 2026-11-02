@@ -29,7 +29,7 @@ it("issues a demo cookie only when demo mode is on", async () => {
   process.env.DEMO_MODE = "true";
   const open = await postDemoSession(new Request("http://localhost/api/demo/session", { method: "POST" }));
   expect(open.status).toBe(200);
-  expect(open.headers.get("set-cookie")).toMatch(/haunted_demo=/);
+  expect(open.headers.get("set-cookie")).toMatch(/haunted_demo=.*Secure/);
   if (previous === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = previous;
 });
