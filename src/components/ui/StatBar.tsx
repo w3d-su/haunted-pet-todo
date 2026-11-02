@@ -23,7 +23,7 @@ export function StatBar({
         : ratio < 0.25
           ? "bg-blood"
           : "bg-pumpkin";
-  const shown = Math.round(value);
+  const shown = Math.ceil(value);
   return (
     <div className="flex items-center gap-2">
       <span className="w-16 text-[8px] leading-relaxed text-ghost-white">{label}</span>

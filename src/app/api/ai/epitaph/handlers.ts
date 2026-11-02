@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { resolveEpitaph } from "@/lib/ai/epitaph";
 import { completeJson } from "@/lib/ai/llm";
-import { applyPetEvent, FALLBACK_EPITAPH } from "@/lib/game/pet";
+import { applyPetEvent, FALLBACK_EPITAPH, hpSpent } from "@/lib/game/pet";
 import { serverEnv } from "@/lib/server/env";
 import {
   badRequest,
@@ -48,7 +48,9 @@ export async function postEpitaph(request: Request, deps: EpitaphDeps): Promise<
         source: "stored",
       });
     }
-    if (world.pet.status !== "dead") return conflict("The pet is still with us");
+    if (world.pet.status !== "dead" && !hpSpent(world.pet.hp)) {
+      return conflict("The pet is still with us");
+    }
     if (!deps.allow(`epitaph:${stores.userId}`, deps.now())) {
       return json({ error: "Too many epitaphs" }, 429, { "Retry-After": "60" });
     }

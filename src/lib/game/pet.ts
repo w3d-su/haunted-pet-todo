@@ -275,6 +275,13 @@ export function applyTaskCompleted(
   return { state: next, emitted };
 }
 
+/** A split of an exact kill can leave a few ulps. That remainder is still death. */
+const HP_DEATH_EPSILON = 1e-9;
+
+export function hpSpent(hp: number): boolean {
+  return hp <= HP_DEATH_EPSILON;
+}
+
 /** When HP hits 0 during [from, to] at a constant hourly rate. Rounded to a millisecond. */
 export function hpReachedZeroAt(
   from: number,
@@ -308,7 +315,7 @@ export function applyDecayTick(
   if (state.currentStreak > 0 && decayed.currentStreak === 0) {
     emitted.push({ type: "STREAK_BROKEN" });
   }
-  if (state.status === "alive" && decayed.hp === 0) {
+  if (state.status === "alive" && hpSpent(decayed.hp)) {
     const from = state.lastTickAt ?? event.toTime;
     const rate = state.stage === "egg" ? 0 : DECAY_RATE_HP;
     const next = markDead(decayed, hpReachedZeroAt(from, event.toTime, state.hp, rate));
@@ -328,7 +335,7 @@ export function applyZombieDrain(
   if (damage === 0) return unchanged(state);
 
   const hp = clampHp(state.hp - damage);
-  if (hp > 0) return { state: { ...state, hp }, emitted: [] };
+  if (!hpSpent(hp)) return { state: { ...state, hp }, emitted: [] };
   const rate = event.zombieCount * ZOMBIE_DRAIN_PER_HOUR;
   const next = markDead(
     { ...state, hp: 0 },
@@ -341,9 +348,15 @@ function applyEpitaphReady(
   state: PetState,
   event: Extract<GameEvent, { type: "EPITAPH_READY" }>,
 ): PetReduction {
-  if (state.status !== "dead") return unchanged(state);
+  if (state.status === "tombstone") return unchanged(state);
+  if (state.status !== "dead" && !hpSpent(state.hp)) return unchanged(state);
   return {
-    state: { ...state, status: "tombstone", currentEpitaph: event.epitaph },
+    state: {
+      ...state,
+      status: "tombstone",
+      hp: 0,
+      currentEpitaph: event.epitaph,
+    },
     emitted: [],
   };
 }
@@ -379,8 +392,7 @@ function applySegment(state: PetState, from: number, to: number, zombies: number
   if (state.status !== "alive" || to <= from) return unchanged(state);
   const hours = (to - from) / HOUR_MS;
   const hpRate = state.stage === "egg" ? 0 : DECAY_RATE_HP + zombies * ZOMBIE_DRAIN_PER_HOUR;
-  // A split of an exact kill can leave a few ulps of HP. That is still death.
-  const dies = hpRate > 0 && state.hp - hpRate * hours <= 1e-9;
+  const dies = hpRate > 0 && hpSpent(state.hp - hpRate * hours);
   const effectUntil = dies ? hpReachedZeroAt(from, to, state.hp, hpRate) : to;
   const decayed = decayStats({ ...state, lastTickAt: from }, effectUntil);
   const emitted: GameEvent[] = [];

@@ -4,7 +4,7 @@ import { listPetUserIds } from "@/lib/db/pet";
 import { createServiceClient } from "@/lib/db/client";
 import { computeHabitualHour, hasCompletionToday } from "@/lib/game/decay";
 import { hourFromTimestamp } from "@/lib/game/evolution";
-import type { PetState } from "@/lib/game/pet";
+import { hpSpent, type PetState } from "@/lib/game/pet";
 import { sendPushNotification } from "@/lib/push/notify";
 import { serverEnv } from "@/lib/server/env";
 import { json, storageFailure } from "@/lib/server/http";
@@ -20,7 +20,12 @@ export interface PushMessage {
   readonly tag?: string;
 }
 
-/** A few pets at a time, so a couple of thousand fit inside the 60s Hobby limit. */
+/**
+ * Four pets at a time. A few round trips of about 20ms each means roughly
+ * 2500 pets finish inside Hobby's 300s Fluid limit. The route does not set
+ * `maxDuration`. Epitaph is one extra write per death, not a model call for
+ * every pet; a slow model reply is logged and the other workers continue.
+ */
 const CRON_CONCURRENCY = 4;
 
 export interface CronDeps {
@@ -40,7 +45,7 @@ export interface CronDeps {
  * not move this: a push is about the person's real hour.
  */
 async function remind(stores: AuthedStores, pet: PetState, now: number, deps: CronDeps): Promise<void> {
-  if (pet.status !== "alive" || pet.stage === "egg") return;
+  if (pet.status !== "alive" || pet.stage === "egg" || hpSpent(pet.hp)) return;
   const events = await stores.events.listEvents(stores.userId);
   const habitual = computeHabitualHour(events, pet.timeZone);
   if (habitual === null) return;
@@ -92,7 +97,7 @@ export async function runDecayCron(request: Request, deps: CronDeps): Promise<Re
             if (!before) continue;
             const world = await syncWorld(stores, deps.now(), null, deps.newId);
             processed += 1;
-            if (before.state.status === "alive" && world.pet.status === "dead") {
+            if (before.state.status === "alive" && hpSpent(world.pet.hp)) {
               deaths += 1;
               try {
                 await deps.requestEpitaph(userId);

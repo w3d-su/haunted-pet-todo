@@ -1,5 +1,11 @@
 import { expect, it } from "vitest";
-import { MAX_HP, TASK_HP_RESTORE, TASK_HUNGER_RESTORE, TASK_MOOD_BOOST } from "@/lib/game/constants";
+import {
+  MAX_HP,
+  TASK_HP_RESTORE,
+  TASK_HUNGER_RESTORE,
+  TASK_MOOD_BOOST,
+  ZOMBIE_DRAIN_PER_HOUR,
+} from "@/lib/game/constants";
 import { calendarDay } from "@/lib/game/evolution";
 import {
   FALLBACK_EPITAPH,
@@ -120,6 +126,16 @@ it("kills the pet when a decay tick reaches 0 HP and keeps the stage", () => {
   expect(result.state.diedAt).toBe(START + HOUR);
   expect(result.state.currentEpitaph).toBe(FALLBACK_EPITAPH);
   expect(result.emitted[0]?.type).toBe("PET_DIED");
+});
+
+it("carves an epitaph when only a speck of HP remains", () => {
+  const state = pet({ status: "alive", stage: "adult", hp: 1e-12 });
+  const result = applyPetEvent(state, { type: "EPITAPH_READY", epitaph: "So long." }, START);
+  expect(result.state.status).toBe("tombstone");
+  expect(result.state.hp).toBe(0);
+  expect(result.state.currentEpitaph).toBe("So long.");
+  const living = pet({ status: "alive", hp: 40 });
+  expect(applyPetEvent(living, { type: "EPITAPH_READY", epitaph: "No." }, START).state).toBe(living);
 });
 
 it("turns a dead pet into a tombstone when the epitaph arrives", () => {
@@ -251,4 +267,16 @@ it("leaves an unknown event alone", () => {
   const state = pet();
   const result = applyPetEvent(state, { type: "PET_HATCHED" }, START);
   expect(result.state).toBe(state);
+});
+
+it("treats a speck of HP left by zombie drain as death", () => {
+  const damage = ZOMBIE_DRAIN_PER_HOUR * (1 / HOUR);
+  const state = pet({ stage: "adult", hp: damage + 1e-12 });
+  const result = applyPetEvent(
+    state,
+    { type: "ZOMBIE_DRAIN", zombieCount: 1, fromTime: START, toTime: START + 1 },
+    START + 1,
+  );
+  expect(result.state.status).toBe("dead");
+  expect(result.state.hp).toBe(0);
 });

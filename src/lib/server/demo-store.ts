@@ -26,9 +26,11 @@ export function memoryDemoAllowed(): boolean {
   return demoModeEnabled() && readSupabaseEnvSafe() === null;
 }
 
+const DEMO_COOKIE_PLACEHOLDER = "your-demo-cookie-secret";
+
 function demoKey(): Buffer {
   const configured = serverEnv("DEMO_COOKIE_SECRET");
-  if (configured) return Buffer.from(configured);
+  if (configured && configured !== DEMO_COOKIE_PLACEHOLDER) return Buffer.from(configured);
   const holder = globalThis as typeof globalThis & { __hauntedDemoKey?: Buffer };
   if (!holder.__hauntedDemoKey) holder.__hauntedDemoKey = randomBytes(32);
   return holder.__hauntedDemoKey;
@@ -116,7 +118,11 @@ export function retainDemoUser(
 
 export function guardDemoTask(world: MemoryWorld, task: Pick<Task, "id" | "userId">, cap = DEMO_TASK_CAP): void {
   const live = world.tasks.filter(
-    (item) => item.userId === task.userId && item.deletedAt === null && item.id !== task.id,
+    (item) =>
+      item.userId === task.userId &&
+      item.deletedAt === null &&
+      item.status !== "done" &&
+      item.id !== task.id,
   );
   if (live.length >= cap) throw new DemoLimitError();
 }
@@ -160,9 +166,8 @@ export async function authorizeDemo(request: Request): Promise<AuthedStores | nu
   };
 }
 
-/** Secure on https, and always in production. Plain http (a LAN IP) keeps the cookie. */
+/** Secure only when this request arrived over https. `next start` is production and still serves plain http. */
 export function cookieIsSecure(request: Request): boolean {
-  if (process.env.NODE_ENV === "production") return true;
   const forwarded = request.headers.get("x-forwarded-proto");
   if (forwarded) return forwarded.split(",")[0]?.trim() === "https";
   return new URL(request.url).protocol === "https:";

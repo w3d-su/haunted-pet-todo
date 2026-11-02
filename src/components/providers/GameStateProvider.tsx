@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import type { PetState } from "@/lib/game/pet";
+import { hpSpent, type PetState } from "@/lib/game/pet";
 import type { TaskView } from "@/components/tasks/TaskList";
 import type { TaskDraft } from "@/components/tasks/TaskForm";
 
@@ -52,6 +52,16 @@ function urlBase64ToUint8Array(value: string): Uint8Array {
   const output = new Uint8Array(raw.length);
   for (let index = 0; index < raw.length; index += 1) output[index] = raw.charCodeAt(index);
   return output;
+}
+
+async function failureMessage(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body.error === "string" && body.error.length > 0) return body.error;
+  } catch {
+    // The body was not JSON. The fallback still tells the player what failed.
+  }
+  return fallback;
 }
 
 function supabaseConfigured(): boolean {
@@ -121,7 +131,7 @@ export function GameStateProvider({
     };
     const taskBody = (await taskResponse.json()) as { tasks: TaskView[]; now: number };
     let nextPet = petBody.pet;
-    if (nextPet.status === "dead") {
+    if (nextPet.status !== "tombstone" && hpSpent(nextPet.hp)) {
       try {
         const epitaph = await authed("/api/ai/epitaph", { method: "POST", body: "{}" });
         if (epitaph.ok) {
@@ -156,7 +166,7 @@ export function GameStateProvider({
             method: "POST",
             credentials: "same-origin",
           });
-          if (!session.ok) throw new Error("Demo mode is locked.");
+          if (!session.ok) throw new Error(await failureMessage(session, "Demo mode is locked."));
         }
         if (!cancelled) await refresh();
         if (!cancelled) setError(null);
@@ -240,7 +250,9 @@ export function GameStateProvider({
           method: "POST",
           body: JSON.stringify(draft),
         });
-        if (!response.ok) throw new Error("The task slipped through the floorboards.");
+        if (!response.ok) {
+          throw new Error(await failureMessage(response, "The task slipped through the floorboards."));
+        }
         await refresh();
       }),
     completeTask: (id) =>
@@ -250,9 +262,9 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ id, status: "done" }),
         });
-        if (!response.ok) throw new Error("That task would not close.");
-        const body = (await response.json()) as { emitted?: { type: string }[] };
-        noticeEvolution(body.emitted);
+        if (!response.ok) throw new Error(await failureMessage(response, "That task would not close."));
+        const body = (await response.json()) as { emitted?: { type: string }[]; pet?: PetState };
+        if (!body.pet || !hpSpent(body.pet.hp)) noticeEvolution(body.emitted);
         await refresh();
       }),
     reorder: (orderedIds) =>
@@ -264,7 +276,7 @@ export function GameStateProvider({
             method: "PATCH",
             body: JSON.stringify({ id, sortOrder: index + 1 }),
           });
-          if (!response.ok) throw new Error("The list would not shuffle.");
+          if (!response.ok) throw new Error(await failureMessage(response, "The list would not shuffle."));
         }
         await refresh();
       }),
@@ -274,7 +286,7 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ type: "REBIRTH" }),
         });
-        if (!response.ok) throw new Error("The egg is not ready.");
+        if (!response.ok) throw new Error(await failureMessage(response, "The egg is not ready."));
         await refresh();
       }),
     requestBreakdown: (id) =>
@@ -283,7 +295,9 @@ export function GameStateProvider({
           method: "POST",
           body: JSON.stringify({ taskId: id }),
         });
-        if (!response.ok) throw new Error("The ghost could not break that down.");
+        if (!response.ok) {
+          throw new Error(await failureMessage(response, "The ghost could not break that down."));
+        }
         const body = (await response.json()) as { intro?: string };
         await refresh();
         setBreakdownLine(body.intro ?? null);
