@@ -1,6 +1,7 @@
+import { commitCompletion } from "@/lib/db/completion";
 import { appendEvent } from "@/lib/db/events";
 import { getPetRecord, savePetState } from "@/lib/db/pet";
-import { claimDone, getTasks, softDeleteTask, upsertTask } from "@/lib/db/tasks";
+import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
 import { bearerToken, createServiceClient, createUserClient } from "@/lib/db/client";
 import { userIdFromAccessToken } from "@/lib/db/auth";
 import { SystemClock } from "@/lib/server/clock";
@@ -29,12 +30,14 @@ export function productionDeps(): AppDeps {
         tasks: {
           getTasks: (id) => getTasks(reader, id),
           upsertTask: (task) => upsertTask(writer, task),
-          claimDone: (task, now) => claimDone(writer, task, now),
+          markOverdue: (taskId, id) => markOverdue(writer, taskId, id),
+          updateOpen: (task) => updateOpen(writer, task),
           softDeleteTask: (taskId, id, now) => softDeleteTask(writer, taskId, id, now),
         },
         events: {
           appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
         },
+        commitCompletion: (input) => commitCompletion(writer, input),
       };
     },
   };

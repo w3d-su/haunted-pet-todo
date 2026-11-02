@@ -213,7 +213,10 @@ export function rebirthPet(state: PetState, now: number, tombstoneId: string): P
  * Central pure reducer. Applies a single GameEvent to PetState.
  * Never mutates input. Does not read the wall clock.
  * Returns `{ state, emitted }`. Early exits use `emitted: []`.
- * Consequence events (hatch, grow, evolve, death, streak break) are emitted here.
+ * A second `TASK_COMPLETED` for a `taskId` already in `recentCompletionTaskIds`
+ * is a no-op. A different `taskId` still counts when `completedAt` and `category` match.
+ * `hoursAsAdult` shown to clients is derived from `becameAdultAt` and `now`.
+ * Catch-up does not write a dead pet just to slide `lastTickAt` forward.
  */
 export interface PetReduction {
   readonly state: PetState;

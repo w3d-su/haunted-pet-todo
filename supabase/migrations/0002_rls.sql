@@ -31,3 +31,8 @@ create policy "users read own pet"
   for select
   to authenticated
   using (auth.uid() = user_id);
+
+revoke all on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
+  from public, anon, authenticated;
+grant execute on function public.complete_task(uuid, uuid, integer, timestamptz, jsonb, jsonb, jsonb)
+  to service_role;

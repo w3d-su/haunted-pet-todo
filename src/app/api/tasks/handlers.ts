@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { applyPetEvent } from "@/lib/game/pet";
+import { applyPetEvent, deriveHoursAsAdult } from "@/lib/game/pet";
 import {
   TASK_CATEGORIES,
   TASK_SIZES,
@@ -165,7 +165,7 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
     const current = world.tasks.find((task) => task.id === existing.id) ?? existing;
 
     if (parsed.data.status === "done") {
-      return completeTask(stores, current, world, parsed.data);
+      return await completeTask(stores, current, world, parsed.data, deps, request);
     }
 
     let next: Task = current;
@@ -185,7 +185,8 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
       }
     }
 
-    const saved = await stores.tasks.upsertTask(next);
+    const saved = await stores.tasks.updateOpen(next);
+    if (!saved) return conflict("Done tasks cannot be edited");
     return json({ task: saved });
   } catch (error) {
     return storageFailure(error);
@@ -196,7 +197,16 @@ async function completeTask(
   stores: AuthedStores,
   current: Task,
   world: World,
-  patch: { title?: string; notes?: string | null; category?: Task["category"]; size?: Task["size"]; dueAt?: number | null; sortOrder?: number },
+  patch: {
+    title?: string;
+    notes?: string | null;
+    category?: Task["category"];
+    size?: Task["size"];
+    dueAt?: number | null;
+    sortOrder?: number;
+  },
+  deps: AppDeps,
+  request: Request,
 ): Promise<Response> {
   let task = current;
   if (patch.title !== undefined) task = { ...task, title: patch.title };
@@ -206,38 +216,43 @@ async function completeTask(
   if (patch.sortOrder !== undefined) task = { ...task, sortOrder: patch.sortOrder };
   if (patch.dueAt !== undefined) task = { ...task, dueAt: patch.dueAt };
 
-  const event = makeTaskCompletedEvent(task, world.now);
-  const claimed = await stores.tasks.claimDone(task, world.now);
-  if (!claimed) return conflict("Task is already done");
-
-  let pet = world.pet;
-  let version = world.version;
-  let savedPet = pet;
-  let reduction = applyPetEvent(pet, event, world.now);
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    reduction = applyPetEvent(pet, event, world.now);
-    const saved = await stores.pets.save(reduction.state, version);
-    if (saved) {
-      savedPet = saved.state;
-      break;
+  let snapshot = world;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    if (attempt > 0) {
+      snapshot = await syncWorld(
+        stores,
+        deps.now(),
+        request.headers.get("x-time-zone"),
+        deps.newId,
+      );
     }
-    const fresh = await stores.pets.get(stores.userId);
-    if (!fresh || attempt === 2) throw new Error("pet_state version conflict");
-    pet = fresh.state;
-    version = fresh.version;
-  }
+    const freshTask = snapshot.tasks.find((item) => item.id === task.id);
+    if (!freshTask || freshTask.status === "done") return conflict("Task is already done");
 
-  await stores.events.appendEvent(stores.userId, "TASK_COMPLETED", { ...event, at: world.now });
-  if (event.wasOverdue) {
-    await stores.events.appendEvent(stores.userId, "ZOMBIE_SLAIN", {
-      taskId: task.id,
-      at: world.now,
+    const event = makeTaskCompletedEvent({ ...task, status: freshTask.status }, snapshot.now);
+    const reduction = applyPetEvent(snapshot.pet, event, snapshot.now);
+    const events = [
+      { eventType: "TASK_COMPLETED", payload: { ...event, at: snapshot.now } },
+      ...(event.wasOverdue
+        ? [{ eventType: "ZOMBIE_SLAIN", payload: { taskId: task.id, at: snapshot.now } }]
+        : []),
+      ...reduction.emitted.map((emitted) => ({
+        eventType: emitted.type,
+        payload: { ...emitted, at: snapshot.now },
+      })),
+    ];
+    const result = await stores.commitCompletion({
+      task: { ...task, status: freshTask.status, completedAt: snapshot.now },
+      expectedVersion: snapshot.version,
+      pet: reduction.state,
+      events,
     });
+    if (result.status === "conflict") return conflict("Task is already done");
+    if (result.status === "ok") {
+      return json({ task: result.task, pet: deriveHoursAsAdult(result.snapshot.state, snapshot.now) });
+    }
   }
-  for (const emitted of reduction.emitted) {
-    await stores.events.appendEvent(stores.userId, emitted.type, { ...emitted, at: world.now });
-  }
-  return json({ task: claimed, pet: savedPet });
+  throw new Error("pet_state version conflict");
 }
 
 export async function deleteTask(request: Request, deps: AppDeps): Promise<Response> {

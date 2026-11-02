@@ -77,6 +77,8 @@ export interface PetState {
   readonly recentCompletionTimestamps: readonly number[];
   /** Parallel to `recentCompletionTimestamps`. */
   readonly recentCompletionCategories: readonly string[];
+  /** Parallel to `recentCompletionTimestamps`. Reward dedupe key. */
+  readonly recentCompletionTaskIds: readonly string[];
   readonly currentEpitaph: string | null;
   readonly graveyard: readonly TombstoneRecord[];
   /** Unix ms of the last processed tick. */
@@ -137,6 +139,7 @@ export function initialPetState(
     hoursAsAdult: 0,
     recentCompletionTimestamps: [],
     recentCompletionCategories: [],
+    recentCompletionTaskIds: [],
     currentEpitaph: null,
     graveyard: [],
     lastTickAt: now,
@@ -217,11 +220,7 @@ export function applyTaskCompleted(
   event: Extract<GameEvent, { type: "TASK_COMPLETED" }>,
   now: number,
 ): PetReduction {
-  if (
-    state.lastCompletionAt === event.completedAt &&
-    state.recentCompletionTimestamps[0] === event.completedAt &&
-    state.recentCompletionCategories[0] === event.category
-  ) {
+  if (state.recentCompletionTaskIds.includes(event.taskId)) {
     return unchanged(state);
   }
 
@@ -246,6 +245,7 @@ export function applyTaskCompleted(
       10,
     ),
     recentCompletionCategories: [event.category, ...state.recentCompletionCategories].slice(0, 10),
+    recentCompletionTaskIds: [event.taskId, ...state.recentCompletionTaskIds].slice(0, 10),
   };
 
   const emitted: GameEvent[] = [];
@@ -405,8 +405,7 @@ export function catchUp(pet: PetState, tasks: readonly Task[], now: number): Cat
   }
 
   if (pet.status !== "alive") {
-    const state = (pet.lastTickAt ?? from) < now ? { ...pet, lastTickAt: now } : pet;
-    return { state, tasks: taskList, emitted: [], overdueTaskIds: marked.overdueTaskIds };
+    return { state: pet, tasks: taskList, emitted: [], overdueTaskIds: marked.overdueTaskIds };
   }
 
   const points = new Set<number>([from, now]);
@@ -430,14 +429,13 @@ export function catchUp(pet: PetState, tasks: readonly Task[], now: number): Cat
     emitted.push(...step.emitted);
   }
 
-  if (state.status !== "alive" && (state.lastTickAt ?? from) < now) {
-    state = { ...state, lastTickAt: now };
-  }
-
-  if (state.becameAdultAt !== null) {
-    const hoursAsAdult = Math.max(0, (now - state.becameAdultAt) / HOUR_MS);
-    if (hoursAsAdult !== state.hoursAsAdult) state = { ...state, hoursAsAdult };
-  }
-
   return { state, tasks: taskList, emitted, overdueTaskIds: marked.overdueTaskIds };
+}
+
+/** Display value. Not written back on read; `becameAdultAt` is the source of truth. */
+export function deriveHoursAsAdult(state: PetState, now: number): PetState {
+  if (state.becameAdultAt === null) return state;
+  const hoursAsAdult = Math.max(0, (now - state.becameAdultAt) / HOUR_MS);
+  if (hoursAsAdult === state.hoursAsAdult) return state;
+  return { ...state, hoursAsAdult };
 }

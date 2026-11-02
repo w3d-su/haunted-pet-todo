@@ -170,6 +170,22 @@ it("ignores decay on dead and tombstone pets", () => {
   }
 });
 
+it("rewards two tasks completed in the same millisecond with the same category", () => {
+  const base = pet({ stage: "hatchling", hp: 10, hunger: 10, mood: 10 });
+  const first = applyPetEvent(
+    base,
+    { type: "TASK_COMPLETED", taskId: "task-a", wasOverdue: false, category: "chores", completedAt: START },
+    START,
+  );
+  const second = applyPetEvent(
+    first.state,
+    { type: "TASK_COMPLETED", taskId: "task-b", wasOverdue: false, category: "chores", completedAt: START },
+    START,
+  );
+  expect(second.state.tasksCompletedTotal).toBe(2);
+  expect(second.state.hp).toBe(10 + TASK_HP_RESTORE * 2);
+});
+
 it("does not stack rewards when the same completion is applied twice", () => {
   const event = {
     type: "TASK_COMPLETED" as const,

@@ -81,7 +81,7 @@ _User Story_: As a user who misses a task's due date, I want the task to visuall
 
 **Acceptance Criteria**:
 
-- 5.1: WHEN the cron tick runs AND a task has `dueAt <= now` AND `status = "todo"`, THEN the system SHALL set `status = "overdue"`.
+- 5.1: WHEN catch-up runs AND a task has `dueAt <= now` AND `status = "todo"`, THEN the system SHALL set `status = "overdue"` with `UPDATE ... WHERE status = 'todo'`. A task that was just completed is left `done`. The transition SHALL NOT upsert the rest of the row.
 - 5.2: WHEN a task transitions to `"overdue"`, THEN the system SHALL append an `TASK_OVERDUE` event to `events`.
 - 5.3: WHEN a task's `status` becomes `"overdue"`, THEN the system SHALL spawn exactly one `ZombieState` associated with that task's `id`.
 - 5.4: WHERE a task already has `status = "overdue"`, WHEN the cron tick runs again, THEN the system SHALL NOT spawn a second zombie for that task.
@@ -127,8 +127,8 @@ _User Story_: As a developer, I want the system to reject completing an already-
 
 **Acceptance Criteria**:
 
-- 9.1: WHEN a `PATCH` request attempts to set `status = "done"` on a task that already has `status = "done"`, THEN the system SHALL return HTTP 409. The check is the conditional update itself, so two concurrent completes yield one success and one 409 and the pet is healed once.
-- 9.2: IF a `TASK_COMPLETED` event is applied via `applyPetEvent` for a task that is already `done`, THEN the system SHALL NOT change `PetState.hp`, `hunger`, or `mood`.
+- 9.1: WHEN a `PATCH` request attempts to set `status = "done"` on a task that already has `status = "done"`, THEN the system SHALL return HTTP 409. Claiming the task (`status <> 'done'`), the pet version compare-and-swap, and the event inserts happen in one transaction. A version miss rolls the claim back; the server recomputes the reward from the fresh pet and retries. Two concurrent completes of the same task yield one success and one 409. Concurrent completes of different tasks each reward the pet once.
+- 9.2: IF a `TASK_COMPLETED` event is applied via `applyPetEvent` for a `taskId` already recorded on the pet, THEN the system SHALL NOT change `PetState.hp`, `hunger`, or `mood`. Two different tasks that share a completion timestamp and category both count.
 
 ---
 

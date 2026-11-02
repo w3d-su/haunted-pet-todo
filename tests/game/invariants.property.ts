@@ -60,7 +60,7 @@ const arbTombstone = fc.record({
 });
 
 const arbHistory = fc.array(
-  fc.record({ ts: arbTs, category: arbCategory }),
+  fc.record({ ts: arbTs, category: arbCategory, taskId: fc.uuid() }),
   { maxLength: 10 },
 );
 
@@ -90,6 +90,7 @@ const arbPetState: fc.Arbitrary<PetState> = fc
     ...rest,
     recentCompletionTimestamps: history.map((entry) => entry.ts),
     recentCompletionCategories: history.map((entry) => entry.category),
+    recentCompletionTaskIds: history.map((entry) => entry.taskId),
   }));
 
 const arbAlivePetState = arbPetState.map((state) => ({ ...state, status: "alive" as const }));

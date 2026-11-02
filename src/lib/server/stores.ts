@@ -19,14 +19,35 @@ export interface PetStore {
 
 export interface TaskStore {
   getTasks(userId: string): Promise<Task[]>;
+  /** Insert a new task. Not used for status transitions. */
   upsertTask(task: Task): Promise<Task>;
   /**
-   * Set status to done only if the stored row is not already done.
-   * The loser of a race gets null.
+   * todo → overdue only. Returns null when the row is no longer todo
+   * (for example it was just completed).
    */
-  claimDone(task: Task, now: number): Promise<Task | null>;
+  markOverdue(taskId: string, userId: string): Promise<Task | null>;
+  /**
+   * Field update, including overdue → todo when the due time moves forward.
+   * Returns null when the stored row is already done.
+   */
+  updateOpen(task: Task): Promise<Task | null>;
   softDeleteTask(taskId: string, userId: string, now: number): Promise<Task | null>;
 }
+
+export interface CompletionCommit {
+  readonly task: Task;
+  readonly expectedVersion: number;
+  readonly pet: PetState;
+  readonly events: readonly {
+    eventType: string;
+    payload: Record<string, unknown>;
+  }[];
+}
+
+export type CompletionResult =
+  | { status: "ok"; snapshot: PetSnapshot; task: Task }
+  | { status: "conflict" }
+  | { status: "retry" };
 
 export interface EventStore {
   appendEvent(
@@ -41,6 +62,11 @@ export interface AuthedStores {
   readonly pets: PetStore;
   readonly tasks: TaskStore;
   readonly events: EventStore;
+  /**
+   * Claim the task, CAS the pet, and insert events in one transaction.
+   * A version miss rolls everything back (`retry`). Already done is `conflict`.
+   */
+  commitCompletion(input: CompletionCommit): Promise<CompletionResult>;
 }
 
 /** Route handlers depend on this port. Tests pass an in-memory implementation. */

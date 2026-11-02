@@ -140,6 +140,69 @@ it("two concurrent completions produce one 200 and one 409", async () => {
   expect(world.pets.get(USER_ID)?.state.hp).toBe(50);
 });
 
+it("concurrent completes of different tasks and concurrent reads do not 500 or double-reward", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  world.pets.set(USER_ID, {
+    state: {
+      ...initialPetState(USER_ID, NOW, crypto.randomUUID(), "UTC"),
+      stage: "hatchling",
+      hp: 10,
+    },
+    clockOffsetMs: 0,
+    version: 1,
+  });
+  const ids: string[] = [];
+  for (let index = 0; index < 4; index += 1) {
+    const created = await postTask(
+      request("POST", "/api/tasks", { title: `Task ${index}`, category: "chores" }),
+      deps,
+    );
+    ids.push(((await created.json()) as { task: { id: string } }).task.id);
+  }
+  const responses = await Promise.all([
+    ...ids.map((id) => patchTask(request("PATCH", "/api/tasks", { id, status: "done" }), deps)),
+    ...ids.map(() => getTasksRoute(request("GET", "/api/tasks"), deps)),
+  ]);
+  expect(responses.every((response) => response.status === 200)).toBe(true);
+  const completions = world.events.filter((event) => event.eventType === "TASK_COMPLETED");
+  expect(completions).toHaveLength(4);
+  const rewarded = new Set(completions.map((event) => (event.payload as { taskId: string }).taskId));
+  expect(rewarded).toEqual(new Set(ids));
+  expect(world.pets.get(USER_ID)?.state.tasksCompletedTotal).toBe(4);
+  expect(world.pets.get(USER_ID)?.state.hp).toBe(10 + 4 * 10);
+  expect(world.tasks.filter((task) => task.status === "done")).toHaveLength(4);
+});
+
+it("does not let an overdue sync revert a completed task", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  const created = await postTask(
+    request("POST", "/api/tasks", { title: "Already finished", dueAt: NOW - 60_000 }),
+    deps,
+  );
+  const { task } = (await created.json()) as { task: { id: string } };
+  const [done, listed] = await Promise.all([
+    patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps),
+    getTasksRoute(request("GET", "/api/tasks"), deps),
+  ]);
+  expect(done.status).toBe(200);
+  expect(listed.status).toBe(200);
+  const second = await patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps);
+  expect(second.status).toBe(409);
+  const after = await getTasksRoute(request("GET", "/api/tasks"), deps);
+  const body = (await after.json()) as { tasks: { status: string }[] };
+  expect(body.tasks[0]?.status).toBe("done");
+  expect(world.events.filter((event) => event.eventType === "TASK_COMPLETED")).toHaveLength(1);
+  expect(world.pets.get(USER_ID)?.state.tasksCompletedTotal).toBe(1);
+  const edited = await patchTask(
+    request("PATCH", "/api/tasks", { id: task.id, title: "Renamed" }),
+    deps,
+  );
+  expect(edited.status).toBe(409);
+  expect(world.tasks.find((item) => item.id === task.id)?.title).toBe("Already finished");
+});
+
 it("rejects a parent task owned by someone else", async () => {
   const world = createMemoryWorld();
   const owner = world.deps(USER_ID, NOW);

@@ -2,7 +2,15 @@ import { petRecordFromRow, petStateToRow } from "@/lib/db/pet";
 import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 import type { PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
-import type { AppDeps, EventStore, PetSnapshot, PetStore, TaskStore } from "@/lib/server/stores";
+import type {
+  AppDeps,
+  CompletionCommit,
+  CompletionResult,
+  EventStore,
+  PetSnapshot,
+  PetStore,
+  TaskStore,
+} from "@/lib/server/stores";
 
 export interface StoredEvent {
   userId: string;
@@ -73,13 +81,21 @@ export function createMemoryWorld(): MemoryWorld {
       else tasks[index] = stored;
       return stored;
     },
-    async claimDone(task, now) {
+    async markOverdue(taskId, userId) {
+      const index = tasks.findIndex((item) => item.id === taskId && item.userId === userId);
+      const current = tasks[index];
+      if (!current || current.deletedAt !== null || current.status !== "todo") return null;
+      const overdue = persistTask({ ...current, status: "overdue" });
+      tasks[index] = overdue;
+      return overdue;
+    },
+    async updateOpen(task) {
       const index = tasks.findIndex((item) => item.id === task.id && item.userId === task.userId);
       const current = tasks[index];
       if (!current || current.deletedAt !== null || current.status === "done") return null;
-      const done = persistTask({ ...task, status: "done", completedAt: now });
-      tasks[index] = done;
-      return done;
+      const stored = persistTask(task);
+      tasks[index] = stored;
+      return stored;
     },
     async softDeleteTask(taskId, userId, now) {
       const index = tasks.findIndex((item) => item.id === taskId && item.userId === userId);
@@ -97,6 +113,41 @@ export function createMemoryWorld(): MemoryWorld {
     },
   };
 
+  function commitCompletion(input: CompletionCommit): Promise<CompletionResult> {
+    const index = tasks.findIndex(
+      (item) => item.id === input.task.id && item.userId === input.task.userId,
+    );
+    const current = tasks[index];
+    if (!current || current.deletedAt !== null || current.status === "done") {
+      return Promise.resolve({ status: "conflict" });
+    }
+    const pet = pets.get(input.task.userId);
+    if (!pet || pet.version !== input.expectedVersion) {
+      return Promise.resolve({ status: "retry" });
+    }
+    const done = persistTask({
+      ...input.task,
+      status: "done",
+      completedAt: input.task.completedAt,
+    });
+    const version = pet.version + 1;
+    const snapshot: PetSnapshot = {
+      state: persistPet(input.pet, pet.clockOffsetMs, version),
+      clockOffsetMs: pet.clockOffsetMs,
+      version,
+    };
+    tasks[index] = done;
+    pets.set(input.task.userId, snapshot);
+    for (const event of input.events) {
+      events.push({
+        userId: input.task.userId,
+        eventType: event.eventType,
+        payload: event.payload,
+      });
+    }
+    return Promise.resolve({ status: "ok", snapshot, task: done });
+  }
+
   return {
     tasks,
     pets,
@@ -106,7 +157,15 @@ export function createMemoryWorld(): MemoryWorld {
         now: () => now,
         newId: () => crypto.randomUUID(),
         authorize: async () =>
-          userId ? { userId, pets: petStore, tasks: taskStore, events: eventStore } : null,
+          userId
+            ? {
+                userId,
+                pets: petStore,
+                tasks: taskStore,
+                events: eventStore,
+                commitCompletion: (input) => commitCompletion(input),
+              }
+            : null,
       };
     },
   };

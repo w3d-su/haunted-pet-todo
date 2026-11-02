@@ -2,8 +2,7 @@
 -- clock_offset_ms is a per-user demo offset added to wall time.
 -- Do not write last_tick_at ahead of that effective clock; decay treats
 -- now < last_tick_at as a no-op.
-
-create extension if not exists pgcrypto;
+-- gen_random_uuid() is built into PostgreSQL 13+.
 
 create table public.tasks (
   id uuid primary key default gen_random_uuid(),
@@ -69,6 +68,7 @@ create table public.pet_state (
   hours_as_adult numeric not null default 0,
   recent_completion_timestamps bigint[] not null default '{}',
   recent_completion_categories text[] not null default '{}',
+  recent_completion_task_ids text[] not null default '{}',
   current_epitaph text,
   graveyard jsonb not null default '[]'::jsonb,
   last_tick_at timestamptz,
@@ -97,3 +97,111 @@ create trigger tasks_set_updated_at
 create trigger pet_state_set_updated_at
   before update on public.pet_state
   for each row execute function public.set_updated_at();
+
+-- Claim a task, compare-and-swap the pet, and insert events.
+-- A version miss raises and rolls the claim back. Already-done returns conflict.
+create or replace function public.complete_task(
+  p_user_id uuid,
+  p_task_id uuid,
+  p_expected_version integer,
+  p_completed_at timestamptz,
+  p_task jsonb,
+  p_pet jsonb,
+  p_events jsonb
+) returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_version integer;
+  v_offset bigint;
+begin
+  update public.tasks
+  set
+    status = 'done',
+    completed_at = p_completed_at,
+    title = coalesce(p_task->>'title', title),
+    notes = case when p_task ? 'notes' then p_task->>'notes' else notes end,
+    category = coalesce(p_task->>'category', category),
+    size = coalesce(p_task->>'size', size),
+    due_at = case
+      when p_task ? 'due_at' then (p_task->>'due_at')::timestamptz
+      else due_at
+    end,
+    sort_order = coalesce((p_task->>'sort_order')::integer, sort_order)
+  where id = p_task_id
+    and user_id = p_user_id
+    and status <> 'done'
+    and deleted_at is null;
+
+  if not found then
+    return pg_catalog.jsonb_build_object('status', 'conflict');
+  end if;
+
+  update public.pet_state
+  set
+    stage = p_pet->>'stage',
+    status = p_pet->>'status',
+    hp = (p_pet->>'hp')::double precision,
+    hunger = (p_pet->>'hunger')::double precision,
+    mood = (p_pet->>'mood')::double precision,
+    current_streak = (p_pet->>'current_streak')::integer,
+    tasks_completed_total = (p_pet->>'tasks_completed_total')::integer,
+    last_completion_at = (p_pet->>'last_completion_at')::timestamptz,
+    last_completion_day = (p_pet->>'last_completion_day')::date,
+    became_adult_at = (p_pet->>'became_adult_at')::timestamptz,
+    hours_as_adult = (p_pet->>'hours_as_adult')::numeric,
+    recent_completion_timestamps = coalesce(
+      (
+        select pg_catalog.array_agg(elem::bigint order by ordinality)
+        from pg_catalog.jsonb_array_elements_text(
+          coalesce(p_pet->'recent_completion_timestamps', '[]'::jsonb)
+        ) with ordinality as listed(elem, ordinality)
+      ),
+      '{}'::bigint[]
+    ),
+    recent_completion_categories = coalesce(
+      (
+        select pg_catalog.array_agg(elem order by ordinality)
+        from pg_catalog.jsonb_array_elements_text(
+          coalesce(p_pet->'recent_completion_categories', '[]'::jsonb)
+        ) with ordinality as listed(elem, ordinality)
+      ),
+      '{}'::text[]
+    ),
+    recent_completion_task_ids = coalesce(
+      (
+        select pg_catalog.array_agg(elem order by ordinality)
+        from pg_catalog.jsonb_array_elements_text(
+          coalesce(p_pet->'recent_completion_task_ids', '[]'::jsonb)
+        ) with ordinality as listed(elem, ordinality)
+      ),
+      '{}'::text[]
+    ),
+    current_epitaph = p_pet->>'current_epitaph',
+    graveyard = coalesce(p_pet->'graveyard', '[]'::jsonb),
+    last_tick_at = (p_pet->>'last_tick_at')::timestamptz,
+    died_at = (p_pet->>'died_at')::timestamptz,
+    version = public.pet_state.version + 1
+  where user_id = p_user_id
+    and version = p_expected_version
+  returning version, clock_offset_ms into v_version, v_offset;
+
+  if not found then
+    raise exception 'version_conflict' using errcode = 'P0001';
+  end if;
+
+  insert into public.events (user_id, event_type, payload)
+  select
+    p_user_id,
+    event_row->>'event_type',
+    coalesce(event_row->'payload', '{}'::jsonb)
+  from pg_catalog.jsonb_array_elements(coalesce(p_events, '[]'::jsonb)) as event_row;
+
+  return pg_catalog.jsonb_build_object(
+    'status', 'ok',
+    'version', v_version,
+    'clock_offset_ms', v_offset
+  );
+end;
+$$;

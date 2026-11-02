@@ -108,18 +108,31 @@ export async function upsertTask(supabase: SupabaseClient, task: Task): Promise<
   return taskFromRow(data);
 }
 
-/**
- * One winner: `status <> 'done'` in the same update. A concurrent complete gets null.
- */
-export async function claimDone(
+/** todo → overdue, and only while the row is still todo. */
+export async function markOverdue(
   supabase: SupabaseClient,
-  task: Task,
-  now: number,
+  taskId: string,
+  userId: string,
 ): Promise<Task | null> {
-  const done: Task = { ...task, status: "done", completedAt: now };
   const { data, error } = await supabase
     .from("tasks")
-    .update(taskToRow(done))
+    .update({ status: "overdue" })
+    .eq("id", taskId)
+    .eq("user_id", userId)
+    .eq("status", "todo")
+    .is("deleted_at", null)
+    .select("*")
+    .maybeSingle();
+  throwOnError(error);
+  if (!data) return null;
+  return taskFromRow(data);
+}
+
+/** Field update that cannot overwrite a done task. */
+export async function updateOpen(supabase: SupabaseClient, task: Task): Promise<Task | null> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .update(taskToRow(task))
     .eq("id", task.id)
     .eq("user_id", task.userId)
     .neq("status", "done")
