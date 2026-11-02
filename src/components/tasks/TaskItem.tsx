@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useSound } from "@/components/providers/SoundProvider";
 import { PixelButton } from "@/components/ui/PixelButton";
 import { SubtaskList } from "@/components/tasks/SubtaskList";
 import type { TaskView } from "@/components/tasks/TaskList";
@@ -28,6 +29,7 @@ export function TaskItem({
   onDrop: (targetId: string) => void;
 }) {
   const reduced = useReducedMotion() === true;
+  const { play } = useSound();
   const [flash, setFlash] = useState(false);
   const done = task.status === "done";
 
@@ -62,6 +64,7 @@ export function TaskItem({
             onClick={() => {
               setFlash(true);
               window.setTimeout(() => setFlash(false), reduced ? 0 : 160);
+              play("task_complete");
               onComplete(task.id);
             }}
           >

@@ -130,22 +130,22 @@
 
 ## Week 4 (Nov 23–30): Polish, Accessibility, Final Tests
 
-- [ ] 16. (Week 4) Fix and verify `no-date-now-guard` hook
-  - [ ] 16.1 Confirm hook reads file path from stdin JSON (`event.file_path`) via Node, not `$KIRO_FILE_PATH`
-  - [ ] 16.2 Confirm violation message is written to stderr (exit 1) not stdout
-  - [ ] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output
+- [x] 16. (Week 4) Fix and verify `no-date-now-guard` hook
+  - [x] 16.1 Confirm hook reads file path from stdin JSON (`event.file_path`) via Node, not `$KIRO_FILE_PATH`
+  - [x] 16.2 Confirm violation message is written to stderr (exit 1) not stdout
+  - [x] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output
     - Files: `.kiro/hooks/no-date-now-guard.json`
   _Requirements: 2.1, 2.2_
 
-- [ ] 17. (Week 4) Accessibility and UX for DemoControls
-  - [ ] 17.1 Add `aria-label` to each button describing the action ("Advance time by 1 hour")
-  - [ ] 17.2 Add a visually hidden live region that announces the clock offset after fast-forward
+- [x] 17. (Week 4) Accessibility and UX for DemoControls
+  - [x] 17.1 Add `aria-label` to each button describing the action ("Advance time by 1 hour")
+  - [x] 17.2 Add a visually hidden live region that announces the clock offset after fast-forward
     - Files: `src/components/ui/DemoControls.tsx`
   _Requirements: 8.3, 8.4_
 
-- [ ] 18. (Week 4) End-to-end smoke test of full decay → death loop
-  - [ ] 18.1 Use `OffsetClock` and a mock Supabase to run 24 one-hour ticks starting from a near-dead pet
-  - [ ] 18.2 Verify pet status reaches `"dead"` at the expected tick
-  - [ ] 18.3 Verify stats never go out of bounds at any intermediate tick
+- [x] 18. (Week 4) End-to-end smoke test of full decay → death loop
+  - [x] 18.1 Use `OffsetClock` and a mock Supabase to run 24 one-hour ticks starting from a near-dead pet
+  - [x] 18.2 Verify pet status reaches `"dead"` at the expected tick
+  - [x] 18.3 Verify stats never go out of bounds at any intermediate tick
     - Files: `tests/game/decay.test.ts`
   _Requirements: 3.1–3.6, 5.1_

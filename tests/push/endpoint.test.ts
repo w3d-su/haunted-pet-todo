@@ -74,6 +74,34 @@ it("rejects a resolved private address before the push agent connects", () => {
   });
 });
 
+it("rejects IPv6 multicast ff00::/8", () => {
+  expect(addressIsBlocked("ff00::1")).toBe(true);
+  expect(addressIsBlocked("ff02::1")).toBe(true);
+  expect(addressIsBlocked("ffff:ffff::1")).toBe(true);
+  expect(addressIsBlocked("2001:4860:4860::8888")).toBe(false);
+});
+
+it("rejects local-use NAT64 64:ff9b:1::/48", () => {
+  expect(addressIsBlocked("64:ff9b:1::1")).toBe(true);
+  expect(addressIsBlocked("64:ff9b:1:ffff::8.8.8.8")).toBe(true);
+  expect(addressIsBlocked("64:ff9b:2::1")).toBe(false);
+});
+
+it("rejects SIIT IPv4-translated ::ffff:0:0:0/96", () => {
+  expect(addressIsBlocked("::ffff:0:0:1")).toBe(true);
+  expect(addressIsBlocked("::ffff:0:808:808")).toBe(true);
+  expect(addressIsBlocked("::ffff:0:ffff:ffff")).toBe(true);
+  expect(addressIsBlocked("::ffff:1:0:1")).toBe(false);
+  expect(addressIsBlocked("::ffff:8.8.8.8")).toBe(false);
+});
+
+it("rejects deprecated site-local fec0::/10", () => {
+  expect(addressIsBlocked("fec0::1")).toBe(true);
+  expect(addressIsBlocked("fed0::1")).toBe(true);
+  expect(addressIsBlocked("feff::1")).toBe(true);
+  expect(addressIsBlocked("2001:4860:4860::8888")).toBe(false);
+});
+
 it("measures base64url key sizes", () => {
   const p256dh = Buffer.alloc(65, 1).toString("base64url");
   const auth = Buffer.alloc(16, 2).toString("base64url");

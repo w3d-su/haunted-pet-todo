@@ -3,12 +3,13 @@
   "hooks": [
     {
       "name": "No Date.now() in Game Core",
-      "description": "Runs the shared ESLint game-core rule on the saved file. PostFileSave cannot block the save; a failing command reports the violation. CI runs the same rule.",
+      "description": "After a save under src/lib/game, reads event.file_path from stdin JSON and rejects Date.now(), new Date(), and globalThis.Date. The violation is written to stderr and the process exits 1. PostFileSave cannot block the save. CI runs the same rule through ESLint.",
       "trigger": "PostFileSave",
       "matcher": "src/lib/game/.*\\.tsx?$",
       "action": {
         "type": "command",
-        "command": "pnpm eslint {{filePath}}"
+        "command": "node .kiro/hooks/no-date-now-guard.mjs",
+        "timeout": 15
       }
     }
   ]

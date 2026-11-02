@@ -5,6 +5,7 @@ import { useReducedMotion } from "framer-motion";
 import type { Task } from "@/lib/game/tasks";
 import { activeZombies, type ZombieState } from "@/lib/game/zombies";
 import { useGameState } from "@/components/providers/GameStateProvider";
+import { useSound } from "@/components/providers/SoundProvider";
 import type { TaskView } from "@/components/tasks/TaskList";
 import { ZombieSprite } from "@/components/zombies/ZombieSprite";
 
@@ -38,13 +39,28 @@ function asTasks(nodes: readonly TaskView[]): Task[] {
 
 export function ZombieLayer() {
   const reduced = useReducedMotion() === true;
+  const { play } = useSound();
   const { tasks, now } = useGameState();
   const live = activeZombies(asTasks(tasks), now);
   const liveRef = useRef(live);
   liveRef.current = live;
   const signature = live.map((zombie) => zombie.taskId).join("|");
   const previous = useRef<ZombieState[]>([]);
+  const seen = useRef<Set<string> | null>(null);
   const [leaving, setLeaving] = useState<ZombieState[]>([]);
+
+  useEffect(() => {
+    const ids = liveRef.current.map((zombie) => zombie.taskId);
+    const known = seen.current;
+    if (known === null) {
+      seen.current = new Set(ids);
+      return;
+    }
+    for (const id of ids) {
+      if (!known.has(id)) play("zombie_spawn");
+    }
+    seen.current = new Set(ids);
+  }, [signature, play]);
 
   useEffect(() => {
     const current = liveRef.current;

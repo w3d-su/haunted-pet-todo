@@ -1,13 +1,16 @@
 import { expect, it } from "vitest";
+import { getPetRecord, getPetState, petStateToRow, savePetState } from "@/lib/db/pet";
 import { OffsetClock } from "@/lib/game/clock";
 import {
   DECAY_RATE_HP,
   DECAY_RATE_HUNGER,
   DECAY_RATE_MOOD,
+  MAX_HP,
   STREAK_BREAK_MOOD_PENALTY,
 } from "@/lib/game/constants";
 import { decayAmount, decayStats } from "@/lib/game/decay";
-import { initialPetState, type PetState } from "@/lib/game/pet";
+import { initialPetState, runOneTick, type PetState } from "@/lib/game/pet";
+import { createPetTable } from "../helpers/pet-table";
 
 const HOUR = 3_600_000;
 const START = Date.UTC(2026, 0, 1);
@@ -80,6 +83,50 @@ it("does not break a streak when there has never been a completion", () => {
   const state = pet({ currentStreak: 0, lastCompletionAt: null, lastTickAt: START });
   const next = decayStats(state, START + 100 * HOUR);
   expect(next.currentStreak).toBe(0);
+});
+
+it("decays a near-dead pet to death across 24 mocked hourly ticks", async () => {
+  const userId = "11111111-1111-4111-8111-111111111111";
+  const petId = "22222222-2222-4222-8222-222222222222";
+  const startHp = 15;
+  const clock = new OffsetClock(START);
+  const nearDead = pet({
+    id: petId,
+    userId,
+    hp: startHp,
+    hunger: 100,
+    mood: 100,
+    lastTickAt: clock.now(),
+    status: "alive",
+  });
+  const table = createPetTable({
+    ...petStateToRow(nearDead),
+    clock_offset_ms: 0,
+    version: 1,
+  });
+  const expectedDeathTick = Math.ceil(startHp / DECAY_RATE_HP);
+  let version = 1;
+
+  for (let tick = 1; tick <= 24; tick += 1) {
+    clock.advance(HOUR);
+    const record = await getPetRecord(table.client, userId);
+    expect(record).not.toBeNull();
+    const next = runOneTick(record?.state ?? nearDead, [], clock.now());
+    expect(next.hp).toBeGreaterThanOrEqual(0);
+    expect(next.hp).toBeLessThanOrEqual(MAX_HP);
+    expect(next.hunger).toBeGreaterThanOrEqual(0);
+    expect(next.hunger).toBeLessThanOrEqual(100);
+    expect(next.mood).toBeGreaterThanOrEqual(0);
+    expect(next.mood).toBeLessThanOrEqual(100);
+    expect(next.status).toBe(tick < expectedDeathTick ? "alive" : "dead");
+    const saved = await savePetState(table.client, next, version);
+    expect(saved).not.toBeNull();
+    version = saved?.version ?? version;
+  }
+
+  const finalState = await getPetState(table.client, userId);
+  expect(finalState?.status).toBe("dead");
+  expect(finalState?.hp).toBe(0);
 });
 
 it("advances, rejects negative advances, and resets", () => {

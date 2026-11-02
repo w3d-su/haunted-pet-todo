@@ -16,6 +16,30 @@ pnpm test
 
 `pnpm dev` serves the landing page at <http://localhost:3000>. `pnpm lint`, `pnpm typecheck`, and `pnpm build` are available too. Copy `.env.example` to `.env.local` when you need local secrets; none are required to boot the landing page or to run the tests.
 
+## Environment
+
+`.env.example` lists every variable and leaves secrets empty. Fill them in `.env.local`. Do not commit that file.
+
+| Variable | Where | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | public | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | public | Supabase anon key |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | public | Web Push VAPID public key |
+| `SUPABASE_SERVICE_ROLE_KEY` | server | Service role. The API writes with this key |
+| `OPENAI_API_KEY` | server | Model key. Unset uses the fallback text |
+| `OPENAI_BASE_URL` | server | Optional compatible endpoint |
+| `AI_DAILY_CAP` | server | Site-wide model calls per UTC day (default 200) |
+| `VAPID_PRIVATE_KEY` | server | Web Push private key |
+| `CRON_SECRET` | server | Bearer token for the daily cron |
+| `DEMO_MODE` | server | `true` shows fast-forward. Not a `NEXT_PUBLIC_` variable |
+| `DEMO_COOKIE_SECRET` | server | HMAC for the demo cookie. Empty means a process-local key |
+
+Vercel Hobby runs the cron in `vercel.json` once a day (`0 8 * * *`). Fluid compute on Hobby allows 300 seconds, and no route sets `maxDuration`.
+
+## Sound
+
+`public/sfx/task_complete.ogg` and `public/sfx/zombie_spawn.ogg` are original square-wave tones generated with ffmpeg for this project (not third-party recordings). Sound stays muted until the player uses the mute toggle, and playback waits for a pointer or key gesture.
+
 ## Supabase
 
 The SQL in `supabase/migrations/` is the schema (`tasks`, `events`, `pet_state`). Helpers in `src/lib/db/` talk to a real project. API tests use an in-memory store behind the same operations (`getTasks`, `upsertTask`, `softDeleteTask`, `getPetState` / `savePetState`, `appendEvent`). `tests/db/` drives those helpers and `completion.ts` against Postgres, and only when opted in (below).

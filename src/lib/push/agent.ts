@@ -19,8 +19,13 @@ blocked.addAddress("::1", "ipv6");
 blocked.addSubnet("fe80::", 10, "ipv6");
 blocked.addSubnet("fc00::", 7, "ipv6");
 blocked.addSubnet("64:ff9b::", 96, "ipv6");
+blocked.addSubnet("64:ff9b:1::", 48, "ipv6");
 blocked.addSubnet("2002::", 16, "ipv6");
 blocked.addSubnet("::", 96, "ipv6");
+blocked.addSubnet("ff00::", 8, "ipv6");
+blocked.addSubnet("fec0::", 10, "ipv6");
+// SIIT IPv4-translated (RFC 2765), not the IPv4-mapped ::ffff:0:0/96 handled below.
+blocked.addSubnet("::ffff:0:0:0", 96, "ipv6");
 
 function mappedIpv4(address: string): string | null {
   const lower = address.toLowerCase();
@@ -39,8 +44,11 @@ function mappedIpv4(address: string): string | null {
 
 /**
  * Not a public unicast address. Covers private, CGNAT, benchmarking,
- * multicast, reserved, loopback, link-local, unspecified, NAT64, 6to4,
- * IPv4-compatible (`::/96`, including `::127.0.0.1`), and IPv4-mapped IPv6.
+ * multicast, reserved, loopback, link-local, unspecified, NAT64
+ * (`64:ff9b::/96` and local-use `64:ff9b:1::/48`), 6to4, IPv6 multicast
+ * (`ff00::/8`), deprecated site-local (`fec0::/10`), IPv4-compatible
+ * (`::/96`, including `::127.0.0.1`), IPv4-mapped IPv6, and SIIT
+ * IPv4-translated (`::ffff:0:0:0/96`).
  */
 export function addressIsBlocked(address: string): boolean {
   const mapped = mappedIpv4(address);

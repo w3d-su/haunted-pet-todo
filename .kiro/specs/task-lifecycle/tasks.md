@@ -143,15 +143,15 @@
 
 ## Week 4 (Nov 23–30): Polish and Accessibility
 
-- [ ] 18. (Week 4) Accessibility audit for task components
-  - [ ] 18.1 Verify `TaskItem` complete button has descriptive `aria-label`
-  - [ ] 18.2 Verify status badges use text + color (not color alone)
-  - [ ] 18.3 Verify `TaskForm` inputs have associated `<label>` elements
+- [x] 18. (Week 4) Accessibility audit for task components
+  - [x] 18.1 Verify `TaskItem` complete button has descriptive `aria-label`
+  - [x] 18.2 Verify status badges use text + color (not color alone)
+  - [x] 18.3 Verify `TaskForm` inputs have associated `<label>` elements
     - Files: `src/components/tasks/`
   _Requirements: 1.1, 7.1_
 
-- [ ] 19. (Week 4) Sound effects for task events
-  - [ ] 19.1 Trigger `task_complete.ogg` through `SoundProvider` on task completion
-  - [ ] 19.2 Trigger `zombie_spawn.ogg` when a new zombie is added to `ZombieLayer`
+- [x] 19. (Week 4) Sound effects for task events
+  - [x] 19.1 Trigger `task_complete.ogg` through `SoundProvider` on task completion
+  - [x] 19.2 Trigger `zombie_spawn.ogg` when a new zombie is added to `ZombieLayer`
     - Files: `src/components/tasks/TaskItem.tsx`, `src/components/zombies/ZombieLayer.tsx`
   _Requirements: 7.1, 5.3_
