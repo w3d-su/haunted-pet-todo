@@ -1,0 +1,56 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+:root {
+  --color-bg-void: #0d0a1a;
+  --color-bg-panel: #1a1530;
+  --color-bg-panel-raised: #231d3e;
+  --color-ghost-white: #e8e0f0;
+  --color-ghost-dim: #a098b8;
+  --color-pumpkin: #e8730a;
+  --color-pumpkin-dark: #a34f00;
+  --color-slime: #4caf50;
+  --color-slime-dark: #2e7d32;
+  --color-blood: #c0392b;
+  --color-blood-dark: #922b21;
+  --color-mood-purple: #9b59b6;
+  --color-bone: #f5e6c8;
+  --color-scanline: rgba(0, 0, 0, 0.18);
+  --color-vignette-start: rgba(0, 0, 0, 0);
+  --color-vignette-end: rgba(0, 0, 0, 0.72);
+}
+
+body {
+  background: var(--color-bg-void);
+  color: var(--color-ghost-white);
+  line-height: 1.625;
+}
+
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.crt-scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0px,
+    transparent 2px,
+    var(--color-scanline) 2px,
+    var(--color-scanline) 4px
+  );
+}
+
+.crt-vignette {
+  background: radial-gradient(
+    ellipse at center,
+    var(--color-vignette-start) 55%,
+    var(--color-vignette-end) 100%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crt-scanlines {
+    display: none;
+  }
+}

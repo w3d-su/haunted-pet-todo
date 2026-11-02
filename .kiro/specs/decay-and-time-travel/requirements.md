@@ -1,0 +1,173 @@
+# Decay and Time Travel — Requirements
+
+## Introduction
+
+Decay is the heartbeat of the Haunted Pet To-Do game loop. Every hour without task completions, the pet's HP, Hunger, and Mood erode. Zombie-carrying overdue tasks add additional HP drain. This spec defines how decay is computed as a pure function of elapsed time, how the clock is injected so game logic never reads the wall clock directly, how a developer-only "time fast-forward" control replays decay for demo purposes, and how Web Push notifications are scheduled based on the user's habitual completion times.
+
+The central correctness guarantee is **additivity**: applying decay over interval `[t0, t1]` followed by `[t1, t2]` must produce the same state as applying it once over `[t0, t2]`.
+
+## Glossary
+
+| Term | Definition |
+|---|---|
+| **Clock** | Interface `{ now(): number }` — sole point of time injection for game logic. |
+| **SystemClock** | Reads `Date.now()`; used only in API route bootstrapping, never in pure game logic. |
+| **OffsetClock** | A clock backed by a fixed base + mutable offset, used for testing and fast-forward. |
+| **Decay** | Per-hour reduction of HP, Hunger, and Mood when the pet is alive. |
+| **DECAY_RATE_HP** | HP reduction per hour (from `constants.ts`). |
+| **DECAY_RATE_HUNGER** | Hunger reduction per hour. |
+| **DECAY_RATE_MOOD** | Mood reduction per hour. |
+| **Catch-up** | Computing accumulated decay when the server restarts or the cron job runs after being missed. |
+| **Fast-forward** | Developer/demo feature that advances the clock offset and replays game logic. |
+| **NEXT_PUBLIC_DEMO_MODE** | Environment variable; when `"true"`, enables `DemoControls`. |
+| **DemoControls** | UI component that triggers fast-forward API calls (+1h, +6h, +24h, reset). |
+| **Tick** | One invocation of the hourly cron job or one fast-forward step. |
+| **lastTickAt** | The `PetState` field recording when the last tick was processed (Unix ms). |
+| **Habitual time** | The time-of-day window in which a user most often completes tasks, inferred from event history. |
+| **Web Push** | Browser push notification via VAPID. |
+| **VAPID** | Voluntary Application Server Identification — the key pair used to authenticate push messages. |
+
+---
+
+## Requirements
+
+### 1. Clock Interface and Injection
+
+**Requirement 1 — Clock interface**
+
+_User Story_: As a developer, I want all game timing to go through an injectable Clock interface so that I can swap in a controlled clock for tests and fast-forward demos without changing game logic.
+
+**Acceptance Criteria**:
+
+- 1.1: WHEN any function in `src/lib/game/` needs the current time, THEN the system SHALL accept it as a `now: number` parameter (Unix ms) and SHALL NOT call `Date.now()` directly.
+- 1.2: WHEN `SystemClock.now()` is called, THEN the system SHALL return `Date.now()`.
+- 1.3: WHEN `OffsetClock.now()` is called, THEN the system SHALL return `base + offsetMs`.
+- 1.4: WHEN `OffsetClock.advance(ms)` is called, THEN the system SHALL add `ms` to `offsetMs` so subsequent `now()` calls reflect the advance.
+- 1.5: WHERE any CI test uses a clock, THEN the system SHALL use `OffsetClock` with a fixed base, never `SystemClock`.
+
+**Requirement 2 — No Date.now() in game core**
+
+_User Story_: As a developer, I want the CI hook to reject any `Date.now()` call in `src/lib/game/` so that the rule is enforced automatically.
+
+**Acceptance Criteria**:
+
+- 2.1: WHEN a file in `src/lib/game/` is saved containing `Date.now(` or `new Date()`, THEN the `no-date-now-guard` hook SHALL exit non-zero and write a violation message to stderr.
+- 2.2: WHEN a file in `src/lib/game/` is saved containing no such patterns, THEN the hook SHALL exit 0.
+
+---
+
+### 2. Hourly Stat Decay
+
+**Requirement 3 — Decay computation**
+
+_User Story_: As a player, I want my pet's stats to decay each hour so that I'm motivated to keep completing tasks.
+
+**Acceptance Criteria**:
+
+- 3.1: WHEN `decayStats(pet, now)` is called AND `PetState.lastTickAt` is set, THEN the system SHALL compute `elapsedHours = (now - lastTickAt) / 3_600_000` and reduce `hp`, `hunger`, and `mood` proportionally.
+- 3.2: WHEN `decayStats` reduces `hp`, THEN the system SHALL clamp the result to `[0, MAX_HP]`.
+- 3.3: WHEN `decayStats` reduces `hunger` or `mood`, THEN the system SHALL clamp each to `[0, 100]`.
+- 3.4: WHEN `decayStats` is called AND `PetState.status` is `"dead"` or `"tombstone"`, THEN the system SHALL return `pet` unchanged.
+- 3.5: WHEN `decayStats` is called AND `PetState.stage` is `"egg"`, THEN the system SHALL NOT decay HP (eggs are immune).
+- 3.6: WHEN `decayStats` completes, THEN the system SHALL set `pet.lastTickAt = now`.
+
+**Requirement 4 — Decay additivity (idempotency over split intervals)**
+
+_User Story_: As a developer, I want decay to be mathematically additive so that the order or granularity of tick invocations doesn't affect the final state.
+
+**Acceptance Criteria**:
+
+- 4.1: WHEN `decayStats(pet, t2)` is called after `decayStats(pet, t1)` where `t1 < t2`, the cumulative stat reduction SHALL equal applying `decayStats` once from the original state to `t2` directly (within floating-point rounding tolerance of ±1).
+- 4.2: WHEN `decayStats` is called with `now === pet.lastTickAt`, THEN the system SHALL return `pet` unchanged (zero elapsed time).
+- 4.3: IF `now < pet.lastTickAt`, THEN the system SHALL return `pet` unchanged (time cannot go backwards).
+
+**Requirement 5 — Catch-up decay on server restart**
+
+_User Story_: As a user who returns after being away, I want my pet's stats to have decayed the correct amount for the time I was away so that the game is realistic.
+
+**Acceptance Criteria**:
+
+- 5.1: WHEN the cron job runs AND `PetState.lastTickAt` is more than 1 hour in the past, THEN the system SHALL apply a single `DECAY_TICK` event covering the full elapsed period `[lastTickAt, now]`.
+- 5.2: WHEN the cron job runs, THEN the system SHALL NOT apply multiple small ticks to simulate hourly steps — a single call with correct elapsed time suffices (due to additivity).
+
+---
+
+### 3. Hourly Cron Job
+
+**Requirement 6 — Vercel Cron job**
+
+_User Story_: As a developer, I want a Vercel Cron job to fire every hour so that stat decay and overdue-task checking happen automatically without client polling.
+
+**Acceptance Criteria**:
+
+- 6.1: WHEN `GET /api/cron/decay` is called, THEN the system SHALL verify the `Authorization: Bearer <CRON_SECRET>` header before processing.
+- 6.2: IF the authorization header is missing or incorrect, THEN the system SHALL return HTTP 401 and exit without modifying any state.
+- 6.3: WHEN the cron handler processes a user, THEN the system SHALL: (a) fetch `PetState`, (b) apply `DECAY_TICK`, (c) compute new zombie drain, (d) apply `ZOMBIE_DRAIN`, (e) check for newly overdue tasks, (f) save updated `PetState`, (g) append events.
+- 6.4: WHEN the cron handler finishes, THEN the system SHALL return HTTP 200 with a summary JSON payload.
+- 6.5: WHEN `vercel.json` is read, THEN the system SHALL include a `crons` entry scheduling `/api/cron/decay` at `"0 * * * *"` (every hour).
+
+---
+
+### 4. Developer Time Fast-Forward
+
+**Requirement 7 — Fast-forward API**
+
+_User Story_: As a demo presenter, I want to advance the in-game clock by 1 hour, 6 hours, or 24 hours instantly so that I can show the full game loop — overdue tasks, zombie spawn, pet death, epitaph, and rebirth — in under 3 minutes.
+
+**Acceptance Criteria**:
+
+- 7.1: WHEN `POST /api/demo/fast-forward` is called AND `NEXT_PUBLIC_DEMO_MODE !== "true"`, THEN the system SHALL return HTTP 403.
+- 7.2: WHEN `POST /api/demo/fast-forward` is called with `{ hours: N }` where N ∈ {1, 6, 24}, THEN the system SHALL: advance the server-side `OffsetClock` by `N * 3_600_000` ms, replay N one-hour ticks by calling the same `DECAY_TICK` + `ZOMBIE_DRAIN` logic as the real cron job, and save the resulting `PetState`.
+- 7.3: WHEN `POST /api/demo/fast-forward` is called with `{ reset: true }`, THEN the system SHALL reset the clock offset to 0.
+- 7.4: WHEN fast-forwarding N hours, THEN the system SHALL produce the same `PetState` as if the real cron had fired N times (Property P20).
+- 7.5: WHEN `POST /api/demo/fast-forward` is called, THEN the system SHALL validate the request body with Zod.
+
+**Requirement 8 — DemoControls component**
+
+_User Story_: As a demo presenter, I want a visible control panel in the UI so that I can advance time without using the CLI during a live demo.
+
+**Acceptance Criteria**:
+
+- 8.1: WHEN `NEXT_PUBLIC_DEMO_MODE === "true"`, THEN the system SHALL render the `DemoControls` component on every page.
+- 8.2: WHEN `NEXT_PUBLIC_DEMO_MODE !== "true"`, THEN the system SHALL NOT render `DemoControls` and SHALL NOT include it in the production bundle.
+- 8.3: WHEN `DemoControls` renders, THEN the system SHALL display buttons for "+1h", "+6h", "+24h", and "Reset".
+- 8.4: WHEN a `DemoControls` button is clicked, THEN the system SHALL call `POST /api/demo/fast-forward` with the corresponding `hours` value, then trigger a full page data refresh.
+
+---
+
+### 5. Web Push Notifications
+
+**Requirement 9 — Push subscription management**
+
+_User Story_: As a user, I want to subscribe to browser push notifications so that my pet can remind me at my most productive times.
+
+**Acceptance Criteria**:
+
+- 9.1: WHEN a user grants notification permission, THEN the system SHALL POST the `PushSubscription` object to `POST /api/push`.
+- 9.2: WHEN the push subscription is stored, THEN the system SHALL persist it in the `push_subscriptions` table associated with the user's `user_id`.
+- 9.3: WHEN the user revokes permission or the subscription expires, THEN the system SHALL remove the row from `push_subscriptions`.
+
+**Requirement 10 — Habitual-time reminder**
+
+_User Story_: As a user, I want to receive a push notification at the time of day when I most often complete tasks so that the reminder arrives when I am most likely to act on it.
+
+**Acceptance Criteria**:
+
+- 10.1: WHEN the cron job runs, THEN the system SHALL inspect the user's last 30 `TASK_COMPLETED` events to compute the most common hour-of-day for completions.
+- 10.2: IF the current hour matches the computed habitual hour AND the user has an active push subscription AND no task has been completed today, THEN the system SHALL send a push notification with a nag message appropriate to the pet's current `NagLevel`.
+- 10.3: WHEN a push notification is sent, THEN the system SHALL use the `sendPushNotification` helper from `src/lib/push/notify.ts`, passing the VAPID keys from environment variables.
+- 10.4: IF the push send fails, THEN the system SHALL log the error and continue without crashing the cron job.
+
+---
+
+### 6. Streak Break from Decay
+
+**Requirement 11 — Streak break detection**
+
+_User Story_: As a user who misses two consecutive days, I want my streak to reset so that the streak has meaningful stakes.
+
+**Acceptance Criteria**:
+
+- 11.1: WHEN `decayStats` is called AND `(now - lastCompletionAt) > STREAK_BREAK_HOURS * 3_600_000`, THEN the system SHALL set `PetState.currentStreak = 0` and apply the mood penalty.
+- 11.2: WHEN a streak break occurs, THEN the system SHALL emit a `STREAK_BROKEN` event within the pet state update.
+- 11.3: WHEN a streak break mood penalty is applied, THEN the system SHALL still clamp mood to `[0, 100]`.

@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run Game Tests on Save",
+      "description": "Runs the pure game-logic Vitest suite whenever a file in src/lib/game/ or tests/game/ is saved. Keeps the injectable-clock core continuously verified without a full test run.",
+      "trigger": "PostFileSave",
+      "matcher": "src/lib/game/.*\\.tsx?$|tests/game/.*\\.tsx?$",
+      "action": {
+        "type": "command",
+        "command": "pnpm vitest run tests/game --reporter=dot",
+        "timeout": 60
+      }
+    }
+  ]
+}
