@@ -94,7 +94,8 @@ export async function getTasks(supabase: SupabaseClient, userId: string): Promis
     .select("*")
     .eq("user_id", userId)
     .is("deleted_at", null)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
   throwOnError(error);
   return z.array(z.unknown()).parse(data ?? []).map((row) => taskFromRow(row));
 }

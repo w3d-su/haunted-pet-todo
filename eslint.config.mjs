@@ -21,7 +21,7 @@ function isGlobalDate(node) {
   return false;
 }
 
-/** One AST rule for CI and the save hook. Selectors miss aliases and computed access. */
+/** Value references to the global Date. Date.UTC and Date.parse stay allowed. */
 const noWallClock = {
   meta: {
     type: "problem",
@@ -60,7 +60,46 @@ const noWallClock = {
       context.report({ node, messageId: "clock", data: { kind } });
     }
 
+    function isTypePosition(node) {
+      const parent = node.parent;
+      if (!parent) return false;
+      return (
+        parent.type === "TSTypeReference" ||
+        parent.type === "TSTypeQuery" ||
+        parent.type === "TSExpressionWithTypeArguments" ||
+        parent.type === "TSImportType"
+      );
+    }
+
+    function allowedClockMember(node) {
+      const parent = node.parent;
+      if (!parent || parent.type !== "MemberExpression" || parent.object !== node || parent.computed) {
+        return false;
+      }
+      return (
+        parent.property.type === "Identifier" &&
+        (parent.property.name === "UTC" || parent.property.name === "parse")
+      );
+    }
+
     return {
+      Identifier(node) {
+        if (node.name !== "Date" || isTypePosition(node)) return;
+        const parent = node.parent;
+        if (parent?.type === "MemberExpression" && parent.property === node) return;
+        if (allowedClockMember(node)) return;
+        if (parent?.type === "NewExpression" && parent.callee === node) return;
+        if (
+          parent?.type === "MemberExpression" &&
+          parent.object === node &&
+          !parent.computed &&
+          parent.property.type === "Identifier" &&
+          parent.property.name === "now"
+        ) {
+          return;
+        }
+        report(node, "Date");
+      },
       CallExpression(node) {
         const callee = node.callee;
         if (callee.type !== "MemberExpression" || !isNowProperty(callee)) return;

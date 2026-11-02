@@ -1,21 +1,33 @@
-import { ESLint } from "eslint";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const eslintBin = path.join(root, "node_modules", ".bin", "eslint");
 const RULE = "haunted/no-wall-clock";
 
-function fromStdin(raw) {
+function warn(message) {
+  console.error(`no-date-now-guard: warning: ${message}`);
+}
+
+function usable(value) {
+  if (typeof value !== "string") return "";
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("{{")) return "";
+  return trimmed;
+}
+
+function pathFromStdin(raw) {
   if (!raw) return "";
   let payload;
   try {
     payload = JSON.parse(raw);
   } catch {
-    console.error("no-date-now-guard: expected JSON on stdin with event.file_path");
-    process.exit(1);
+    return "";
   }
-  const candidate = payload?.event?.file_path;
-  return typeof candidate === "string" ? candidate.trim() : "";
+  const event = payload?.event;
+  return usable(event?.file_path) || usable(event?.filePath) || usable(payload?.filePath) || "";
 }
 
 async function readStdin() {
@@ -26,30 +38,53 @@ async function readStdin() {
 }
 
 // CLI arg (Kiro {{filePath}}), then KIRO_FILE_PATH, then stdin JSON.
-const fromArg = process.argv[2]?.trim() ?? "";
-const fromEnv = process.env.KIRO_FILE_PATH?.trim() ?? "";
-const filePath = fromArg || fromEnv || fromStdin(fromArg || fromEnv ? "" : await readStdin());
+const fromArg = usable(process.argv[2]);
+const fromEnv = usable(process.env.KIRO_FILE_PATH);
+const filePath = fromArg || fromEnv || pathFromStdin(fromArg || fromEnv ? "" : await readStdin());
 
 if (!filePath) {
-  console.error(
-    "no-date-now-guard: missing file path (argument, KIRO_FILE_PATH, or stdin event.file_path)",
-  );
+  warn("no file path (argument, KIRO_FILE_PATH, or stdin filePath)");
+  process.exit(0);
+}
+
+const resolved = path.resolve(filePath);
+if (!existsSync(resolved)) {
+  warn(`file not found: ${filePath}`);
+  process.exit(0);
+}
+
+let source = "";
+try {
+  source = readFileSync(resolved, "utf8");
+} catch {
+  warn(`file not found: ${filePath}`);
+  process.exit(0);
+}
+
+// stdin-filename puts the contents under the game-core rule even for a temp path.
+// The .bin/eslint shim sets NODE_PATH. Importing ESLint from this file does not.
+const result = spawnSync(
+  eslintBin,
+  ["--format", "json", "--stdin", "--stdin-filename", "src/lib/game/hook-target.ts"],
+  { cwd: root, encoding: "utf8", input: source },
+);
+
+if (result.error) {
+  console.error(`no-date-now-guard: ${result.error.message}`);
   process.exit(1);
 }
 
-const eslint = new ESLint({ cwd: root });
 let results;
 try {
-  results = await eslint.lintFiles([path.resolve(filePath)]);
-} catch (error) {
-  const message = error instanceof Error ? error.message : "eslint failed";
-  console.error(`no-date-now-guard: ${message}`);
-  process.exit(1);
+  results = JSON.parse(result.stdout || "[]");
+} catch {
+  console.error(result.stderr || "no-date-now-guard: eslint did not return JSON");
+  process.exit(result.status === 0 ? 1 : result.status ?? 1);
 }
 
 let failed = false;
-for (const result of results) {
-  for (const message of result.messages) {
+for (const item of results) {
+  for (const message of item.messages ?? []) {
     if (message.ruleId !== RULE && !message.fatal) continue;
     failed = true;
     const line = message.line ?? 1;

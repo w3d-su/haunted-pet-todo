@@ -36,6 +36,7 @@ export function TaskItem({
   const done = task.status === "done";
 
   function onKeyDown(event: KeyboardEvent<HTMLLIElement>) {
+    if (pending) return;
     if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (event.key === "ArrowUp" && onMoveUp) {
       event.preventDefault();
@@ -75,18 +76,24 @@ export function TaskItem({
         <div className="flex flex-wrap justify-end gap-2">
           {onMoveUp ? (
             <PixelButton
-              disabled={pending}
+              aria-disabled={pending || undefined}
               aria-label={`Up, move ${task.title}`}
-              onClick={onMoveUp}
+              className={pending ? "border-ghost-dim text-ghost-dim" : ""}
+              onClick={() => {
+                if (!pending) onMoveUp();
+              }}
             >
               Up
             </PixelButton>
           ) : null}
           {onMoveDown ? (
             <PixelButton
-              disabled={pending}
+              aria-disabled={pending || undefined}
               aria-label={`Down, move ${task.title}`}
-              onClick={onMoveDown}
+              className={pending ? "border-ghost-dim text-ghost-dim" : ""}
+              onClick={() => {
+                if (!pending) onMoveDown();
+              }}
             >
               Down
             </PixelButton>

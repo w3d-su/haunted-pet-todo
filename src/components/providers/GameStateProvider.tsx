@@ -281,16 +281,21 @@ export function GameStateProvider({
       }),
     reorder: (orderedIds) =>
       run(async () => {
+        const sortById = new Map(tasks.map((task) => [task.id, task.sortOrder]));
+        let changed = false;
         for (let index = 0; index < orderedIds.length; index += 1) {
           const id = orderedIds[index];
           if (!id) continue;
+          const sortOrder = index + 1;
+          if (sortById.get(id) === sortOrder) continue;
+          changed = true;
           const response = await authed("/api/tasks", {
             method: "PATCH",
-            body: JSON.stringify({ id, sortOrder: index + 1 }),
+            body: JSON.stringify({ id, sortOrder }),
           });
           if (!response.ok) throw new Error(await failureMessage(response, "The list would not shuffle."));
         }
-        await refresh();
+        if (changed) await refresh();
       }),
     rebirth: () =>
       run(async () => {
