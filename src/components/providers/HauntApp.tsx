@@ -10,7 +10,6 @@ import { Tombstone } from "@/components/pet/Tombstone";
 import { TaskForm } from "@/components/tasks/TaskForm";
 import { TaskList, type TaskView } from "@/components/tasks/TaskList";
 import { DemoControls } from "@/components/ui/DemoControls";
-import { MuteToggle } from "@/components/ui/MuteToggle";
 import { ZombieLayer } from "@/components/zombies/ZombieLayer";
 import { GameStateProvider, useGameState } from "@/components/providers/GameStateProvider";
 
@@ -39,7 +38,6 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
 
   return (
     <main className="min-h-screen bg-bg-void px-4 py-8 text-ghost-white">
-      <MuteToggle />
       <ZombieLayer />
       <section className="mx-auto w-full max-w-xl border-2 border-ghost-white bg-bg-panel px-4 py-6">
         <p className="text-[10px] leading-relaxed text-pumpkin">KIROWEEN 2026</p>
@@ -69,7 +67,7 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
             <PetStats pet={pet} />
             {pet.graveyard.length > 0 ? (
               <details className="mt-4 text-left">
-                <summary className="cursor-pointer text-[8px] leading-relaxed text-bone">
+                <summary className="cursor-pointer text-[8px] leading-relaxed text-bone focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-pumpkin)]">
                   Graveyard ({pet.graveyard.length})
                 </summary>
                 <ul className="mt-2 flex flex-col gap-2">

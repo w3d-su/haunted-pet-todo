@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Press_Start_2P } from "next/font/google";
+import { SoundProvider } from "@/components/providers/SoundProvider";
 import { CrtOverlay } from "@/components/ui/CrtOverlay";
+import { MuteToggle } from "@/components/ui/MuteToggle";
 import "./globals.css";
 
 const pressStart = Press_Start_2P({
@@ -23,7 +25,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${pressStart.className} antialiased`}>
-        {children}
+        <SoundProvider>
+          {children}
+          <MuteToggle />
+        </SoundProvider>
         <CrtOverlay />
       </body>
     </html>

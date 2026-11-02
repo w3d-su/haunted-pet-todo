@@ -26,7 +26,7 @@ function spriteFor(pet: PetState): { src: string; size: string; alt: string } {
   return {
     src: `/sprites/${file}`,
     size: "h-24 w-24",
-    alt: hungry ? `Ghost pet — ${label}, hungry` : `Ghost pet — ${label} stage`,
+    alt: hungry ? `Ghost pet — ${label} stage, hungry` : `Ghost pet — ${label} stage`,
   };
 }
 

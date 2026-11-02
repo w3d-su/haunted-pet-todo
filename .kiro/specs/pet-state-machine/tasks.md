@@ -148,15 +148,15 @@
 
 ## Week 4 (Nov 23–30): Polish, Accessibility, Deploy
 
-- [ ] 17. (Week 4) Accessibility audit for pet components
-  - [ ] 17.1 Verify all `<img>` sprites have descriptive `alt` text per visual-style checklist
-  - [ ] 17.2 Verify focus rings on `PixelButton` in Tombstone
-  - [ ] 17.3 Verify epitaph contrast passes WCAG AA
+- [x] 17. (Week 4) Accessibility audit for pet components
+  - [x] 17.1 Verify all `<img>` sprites have descriptive `alt` text per visual-style checklist
+  - [x] 17.2 Verify focus rings on `PixelButton` in Tombstone
+  - [x] 17.3 Verify epitaph contrast passes WCAG AA
     - Files: `src/components/pet/`
   _Requirements: 6.4_
 
-- [ ] 18. (Week 4) Integration test for DB pet helpers
-  - [ ] 18.1 Mock Supabase client and test `getPetState` handles missing row gracefully
-  - [ ] 18.2 Test `savePetState` correctly maps TypeScript fields to snake_case columns
+- [x] 18. (Week 4) Integration test for DB pet helpers
+  - [x] 18.1 Mock Supabase client and test `getPetState` handles missing row gracefully
+  - [x] 18.2 Test `savePetState` correctly maps TypeScript fields to snake_case columns
     - Files: `tests/db/pet.test.ts`
   _Requirements: 7.1 (graveyard persistence)_
