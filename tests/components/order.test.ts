@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
-import { reorderTask } from "@/components/tasks/order";
+import { nextMoveButtonFocus, reorderTask } from "@/components/tasks/order";
 
 it("moves a task one step up or down", () => {
   expect(reorderTask(["a", "b", "c"], "b", -1)).toEqual(["b", "a", "c"]);
@@ -32,4 +32,28 @@ it("keeps move buttons focusable and ignores Alt+Arrow while a save is pending",
   expect(source).toContain("aria-disabled={pending || undefined}");
   expect(source).not.toMatch(/aria-label=\{`Up, move \$\{task\.title\}`\}[\s\S]{0,80}disabled=\{pending\}/);
   expect(source).not.toMatch(/aria-label=\{`Down, move \$\{task\.title\}`\}[\s\S]{0,80}disabled=\{pending\}/);
+});
+
+it("keeps Done focusable and ignores the click while a save is pending", () => {
+  const source = readFileSync("src/components/tasks/TaskItem.tsx", "utf8");
+  expect(source).toContain("aria-disabled={pending || undefined}");
+  expect(source).toContain("aria-label={`Complete ${task.title}`}");
+  expect(source).toMatch(/aria-label=\{`Complete \$\{task\.title\}`\}[\s\S]*if \(pending\) return;/);
+  expect(source).not.toMatch(/Complete \$\{task\.title\}`[\s\S]{0,240}disabled=\{pending\}/);
+});
+
+it("moves focus to the other move button when the focused end disappears", () => {
+  expect(nextMoveButtonFocus("up", true, false, true, true)).toBe("down");
+  expect(nextMoveButtonFocus("down", true, true, true, false)).toBe("up");
+  expect(nextMoveButtonFocus("up", true, true, true, true)).toBeNull();
+  expect(nextMoveButtonFocus("down", true, true, true, true)).toBeNull();
+  expect(nextMoveButtonFocus("up", true, true, true, false)).toBeNull();
+  expect(nextMoveButtonFocus("down", true, false, true, true)).toBeNull();
+  expect(nextMoveButtonFocus("up", true, false, true, false)).toBeNull();
+  expect(nextMoveButtonFocus(null, true, false, true, true)).toBeNull();
+  expect(nextMoveButtonFocus("up", false, false, false, true)).toBeNull();
+
+  const source = readFileSync("src/components/tasks/TaskItem.tsx", "utf8");
+  expect(source).toContain("nextMoveButtonFocus(");
+  expect(source).toContain("target.focus()");
 });

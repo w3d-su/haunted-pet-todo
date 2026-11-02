@@ -1,11 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { Linter } from "eslint";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import noWallClock from "../../eslint/no-wall-clock.mjs";
+import { eslintExecutable, eslintFailed } from "../../.kiro/hooks/no-date-now-guard.mjs";
 
 async function typescriptFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -39,12 +40,29 @@ function hookEnv(filePath?: string): NodeJS.ProcessEnv {
   return env;
 }
 
-function runDateGuard(options: { args?: string[]; input?: string; envPath?: string }) {
-  return spawnSync(process.execPath, [".kiro/hooks/no-date-now-guard.mjs", ...(options.args ?? [])], {
+function runDateGuard(options: {
+  args?: string[];
+  input?: string;
+  envPath?: string;
+  cwd?: string;
+  eslint?: string;
+}) {
+  const env = hookEnv(options.envPath);
+  if (options.eslint) env.NO_DATE_NOW_ESLINT = options.eslint;
+  return spawnSync(process.execPath, [path.resolve(".kiro/hooks/no-date-now-guard.mjs"), ...(options.args ?? [])], {
     input: options.input ?? "",
     encoding: "utf8",
-    env: hookEnv(options.envPath),
+    env,
+    cwd: options.cwd,
   });
+}
+
+function fakeEslint(body: string) {
+  const dir = mkdtempSync(path.join(tmpdir(), "date-guard-eslint-"));
+  const file = path.join(dir, "eslint");
+  writeFileSync(file, `#!/usr/bin/env node\n${body}\n`);
+  chmodSync(file, 0o755);
+  return { dir, file };
 }
 
 const linter = new Linter({ configType: "flat" });
@@ -78,6 +96,57 @@ it("wall clock rule flags computed access, spacing, new Date, aliases, and globa
   ];
   for (const code of violations) {
     expect(wallClockMessages(code), code).not.toEqual([]);
+  }
+});
+
+it("wall clock rule flags self.Date, unbound now, and aliases of the global objects", () => {
+  const cases: Array<[string, RegExp]> = [
+    ["export const n = new self.Date();\n", /new Date/],
+    ["export const n = self.Date;\n", /self\.Date/],
+    ["export const n = self['Date'];\n", /self\.Date/],
+    ["export const n = self.Date.now();\n", /Date\.now\(\)/],
+    ["const n = Date.now;\nexport const called = n();\n", /Date/],
+    ["export const n = Date.now.call(null);\n", /Date/],
+    ["export const n = Date['now'];\n", /Date/],
+    ["const w = window;\nexport const n = w.Date.now();\n", /Date\.now\(\)/],
+    ["const g = globalThis;\nexport const n = new g.Date();\n", /new Date/],
+    ["const s = self;\nexport const n = s.Date;\n", /Date/],
+    ["const s = self;\nexport const n = new s.Date();\n", /new Date/],
+    ["const w = window;\nconst D = w.Date;\nexport const n = D.now();\n", /Date\.now\(\)/],
+    ["const outer = globalThis;\nconst inner = outer;\nexport const n = new inner.Date();\n", /new Date/],
+    ["export const bag = { Date };\n", /Date/],
+  ];
+  for (const [code, pattern] of cases) {
+    const messages = wallClockMessages(code);
+    expect(messages, code).not.toEqual([]);
+    expect(
+      messages.some((message) => pattern.test(message.message)),
+      code,
+    ).toBe(true);
+  }
+});
+
+it("wall clock rule reports a direct Date.now() call once", () => {
+  for (const code of ["export const n = Date['now']();\n", "export const n = Date.now();\n"]) {
+    const messages = wallClockMessages(code);
+    expect(messages, code).toHaveLength(1);
+    expect(messages[0]?.message, code).toMatch(/Date\.now\(\)/);
+  }
+});
+
+it("wall clock rule ignores instanceof Date, Date keys, and shadowed globals", () => {
+  const clean = [
+    "export function check(value) { return value instanceof Date; }\n",
+    "export function check(value) { return value instanceof self.Date; }\n",
+    "export const bag = { Date: 1 };\n",
+    "export function take(bag) { const { Date: renamed } = bag; return renamed; }\n",
+    "function take(window) { return new window.Date(); }\n",
+    "const w = window;\nexport const n = w.now();\n",
+    "const g = globalThis;\nexport const n = g.now();\n",
+    "const s = self;\nexport const n = s.now();\n",
+  ];
+  for (const code of clean) {
+    expect(wallClockMessages(code), code).toEqual([]);
   }
 });
 
@@ -119,6 +188,57 @@ it(
     rmSync(dir, { recursive: true, force: true });
   }
 },
+  30_000,
+);
+
+it("date guard treats eslint status 2, or a nonzero empty stdout, as failure", () => {
+  expect(eslintExecutable("win32")).toBe("eslint.cmd");
+  expect(eslintExecutable("linux")).toBe("eslint");
+  expect(eslintFailed(2, "[]")).toBe(true);
+  expect(eslintFailed(2, "")).toBe(true);
+  expect(eslintFailed(1, "")).toBe(true);
+  expect(eslintFailed(1, " \n")).toBe(true);
+  expect(eslintFailed(1, "[]")).toBe(false);
+  expect(eslintFailed(0, "")).toBe(false);
+  expect(eslintFailed(null, "")).toBe(false);
+});
+
+it(
+  "date guard prints eslint stderr and exits 1 when eslint crashes",
+  () => {
+    const crashed = fakeEslint("process.stdout.write('[]'); process.stderr.write('eslint: fatal\\n'); process.exit(2);");
+    const empty = fakeEslint("process.stderr.write('eslint: no json\\n'); process.exit(1);");
+    try {
+      const statusTwo = runDateGuard({ args: [clockFile], eslint: crashed.file });
+      expect(statusTwo.status).toBe(1);
+      expect(statusTwo.stdout).toBe("");
+      expect(statusTwo.stderr).toMatch(/eslint: fatal/);
+
+      const emptyStdout = runDateGuard({ args: [clockFile], eslint: empty.file });
+      expect(emptyStdout.status).toBe(1);
+      expect(emptyStdout.stdout).toBe("");
+      expect(emptyStdout.stderr).toMatch(/eslint: no json/);
+    } finally {
+      rmSync(crashed.dir, { recursive: true, force: true });
+      rmSync(empty.dir, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);
+
+it(
+  "date guard resolves a relative path from the repo root",
+  () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "date-guard-cwd-"));
+    try {
+      const result = runDateGuard({ args: ["src/lib/game/clock.ts"], cwd: dir });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
   30_000,
 );
 
