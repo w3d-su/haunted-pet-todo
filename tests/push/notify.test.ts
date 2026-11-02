@@ -1,3 +1,4 @@
+import https from "node:https";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const { sendNotification, setVapidDetails } = vi.hoisted(() => ({
@@ -48,9 +49,14 @@ it("times out the socket, reports a gone subscription, and does not throw", asyn
   await expect(sendPushNotification(subscription, { title: "Hi", body: "Boo" })).resolves.toBe(
     "sent",
   );
-  expect(sendNotification).toHaveBeenCalledWith(subscription, expect.any(String), {
-    timeout: PUSH_TIMEOUT_MS,
-  });
+  expect(sendNotification).toHaveBeenCalledWith(
+    { ...subscription, endpoint: "https://fcm.googleapis.com/fcm/send/haunt" },
+    expect.any(String),
+    expect.objectContaining({
+      timeout: PUSH_TIMEOUT_MS,
+      agent: expect.any(https.Agent),
+    }),
+  );
 
   sendNotification.mockRejectedValueOnce(Object.assign(new Error("gone"), { statusCode: 410 }));
   await expect(sendPushNotification(subscription, { title: "Hi", body: "Boo" })).resolves.toBe(

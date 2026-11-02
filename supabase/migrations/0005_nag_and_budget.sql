@@ -30,6 +30,7 @@ revoke all on table public.ai_budget from anon, authenticated;
 create function public.claim_nag_day(p_user_id uuid, p_day date)
 returns boolean
 language plpgsql
+set search_path = ''
 as $$
 declare
   claimed uuid;
@@ -39,7 +40,7 @@ begin
   on conflict (user_id) do update
     set last_nag_day = excluded.last_nag_day
     where nag.last_nag_day is distinct from excluded.last_nag_day
-  returning user_id into claimed;
+  returning nag.user_id into claimed;
   return claimed is not null;
 end;
 $$;
@@ -56,6 +57,7 @@ create function public.take_ai_budget(
   p_site_cap integer
 ) returns boolean
 language plpgsql
+set search_path = ''
 as $$
 declare
   site_used integer;
@@ -70,7 +72,7 @@ begin
   on conflict (scope, day) do update
     set used = budget.used + 1
     where budget.used < p_site_cap
-  returning used into site_used;
+  returning budget.used into site_used;
 
   if site_used is null then
     return false;
@@ -81,12 +83,12 @@ begin
   on conflict (scope, day) do update
     set used = budget.used + 1
     where budget.used < p_user_cap
-  returning used into user_used;
+  returning budget.used into user_used;
 
   if user_used is null then
     update public.ai_budget
-    set used = used - 1
-    where scope = 'site' and day = p_day;
+    set used = public.ai_budget.used - 1
+    where public.ai_budget.scope = 'site' and public.ai_budget.day = p_day;
     return false;
   end if;
 
@@ -100,8 +102,10 @@ grant execute on function public.take_ai_budget(uuid, date, integer, integer) to
 create function public.limit_push_subscriptions()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext(new.user_id::text));
   if (
     select count(*)
     from public.push_subscriptions

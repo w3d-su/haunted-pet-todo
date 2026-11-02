@@ -88,6 +88,31 @@ describeDb("postgres push subscriptions", () => {
     expect(await claimNagDay(supabase, USER_ID, "2026-07-05")).toBe(true);
   });
 
+  it("keeps exactly five rows when twenty inserts race", async () => {
+    await pool.query("truncate public.push_subscriptions");
+    const results = await Promise.all(
+      Array.from({ length: 20 }, (_, index) =>
+        pool
+          .query(
+            `insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+             values ($1, $2, 'k', 'a')`,
+            [USER_ID, `https://fcm.googleapis.com/fcm/send/race-${index}`],
+          )
+          .then(() => "ok" as const)
+          .catch((error: { message?: string }) => {
+            expect(error.message ?? "").toMatch(/push subscription cap/i);
+            return "cap" as const;
+          }),
+      ),
+    );
+    expect(results.filter((result) => result === "ok")).toHaveLength(5);
+    const count = await pool.query<{ n: string }>(
+      "select count(*)::text as n from public.push_subscriptions where user_id = $1",
+      [USER_ID],
+    );
+    expect(count.rows[0]?.n).toBe("5");
+  });
+
   it("lets authenticated clients select and not write", async () => {
     const privileges = await pool.query<{
       read: boolean;

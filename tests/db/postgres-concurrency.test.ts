@@ -25,6 +25,7 @@ import {
 import {
   claimBreakdown,
   getTasks,
+  releaseBreakdown,
   markOverdue,
   softDeleteTask,
   updateOpen,
@@ -76,6 +77,7 @@ function pgDeps(pool: Pool): AppDeps {
         updateOpen: (task) => updateOpen(supabase, task),
         softDeleteTask: (taskId, id, now) => softDeleteTask(supabase, taskId, id, now),
         claimBreakdown: (taskId, id) => claimBreakdown(supabase, taskId, id),
+        releaseBreakdown: (taskId, id) => releaseBreakdown(supabase, taskId, id),
       },
       events: {
         appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),

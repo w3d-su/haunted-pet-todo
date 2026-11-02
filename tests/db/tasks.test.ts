@@ -20,6 +20,7 @@ import {
 import {
   claimBreakdown,
   getTasks,
+  releaseBreakdown,
   markOverdue,
   softDeleteTask,
   updateOpen,
@@ -54,6 +55,7 @@ function pgStores(pool: Pool, now: number): { deps: AppDeps; stores: () => Promi
       updateOpen: (task) => updateOpen(supabase, task),
       softDeleteTask: (taskId, id, at) => softDeleteTask(supabase, taskId, id, at),
       claimBreakdown: (taskId, id) => claimBreakdown(supabase, taskId, id),
+      releaseBreakdown: (taskId, id) => releaseBreakdown(supabase, taskId, id),
     },
     events: {
       appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),

@@ -1,5 +1,6 @@
 import { sendNotification, setVapidDetails, type PushSubscription } from "web-push";
-import { allowedPushEndpoint } from "@/lib/push/endpoint";
+import { createPushAgent } from "@/lib/push/agent";
+import { normalizedPushEndpoint } from "@/lib/push/endpoint";
 import { getVapidKeys } from "@/lib/push/vapid";
 
 export interface PushPayload {
@@ -28,14 +29,18 @@ export async function sendPushNotification(
   subscription: PushSubscription,
   payload: PushPayload,
 ): Promise<PushSendResult> {
-  if (!allowedPushEndpoint(subscription.endpoint)) {
+  const endpoint = normalizedPushEndpoint(subscription.endpoint);
+  if (!endpoint) {
     console.error("refusing push endpoint");
     return "failed";
   }
   try {
     const { publicKey, privateKey } = getVapidKeys();
     setVapidDetails("mailto:ghost@haunted-pet-todo.app", publicKey, privateKey);
-    await sendNotification(subscription, JSON.stringify(payload), { timeout: PUSH_TIMEOUT_MS });
+    await sendNotification({ ...subscription, endpoint }, JSON.stringify(payload), {
+      timeout: PUSH_TIMEOUT_MS,
+      agent: createPushAgent(),
+    });
     return "sent";
   } catch (error) {
     const status = statusCode(error);

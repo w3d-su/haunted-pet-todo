@@ -134,6 +134,12 @@ export function createMemoryWorld(): MemoryWorld {
       tasks[index] = claimed;
       return claimed;
     },
+    async releaseBreakdown(taskId, userId) {
+      const index = tasks.findIndex((item) => item.id === taskId && item.userId === userId);
+      const current = tasks[index];
+      if (!current || !current.breakdownSuggested) return;
+      tasks[index] = persistTask({ ...current, breakdownSuggested: false });
+    },
   };
 
   const eventStore: EventStore = {

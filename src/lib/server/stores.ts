@@ -37,6 +37,8 @@ export interface TaskStore {
    * Returns null when another request already claimed it, or the task is done.
    */
   claimBreakdown(taskId: string, userId: string): Promise<Task | null>;
+  /** Clear a claim that did not manage to write subtasks. */
+  releaseBreakdown(taskId: string, userId: string): Promise<void>;
 }
 
 export interface CompletionCommit {

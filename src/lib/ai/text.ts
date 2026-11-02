@@ -7,7 +7,9 @@ export function quoteForPrompt(value: string, max = 80): string {
 export function plainLine(value: string): string {
   return value
     .replace(/<[^>]*>/g, "")
+    .replace(/javascript:/gi, "")
     .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\bwww\.\S+/gi, "")
     .replace(/[<>]/g, "")
     .replace(/[ \t]+/g, " ")
     .trim();

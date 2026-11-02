@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { hpSpent, type PetState } from "@/lib/game/pet";
 import type { TaskView } from "@/components/tasks/TaskList";
+import { breakdownFailureIsQuiet } from "@/components/tasks/breakdown-ui";
 import type { TaskDraft } from "@/components/tasks/TaskForm";
 
 interface GameValue {
@@ -303,6 +304,14 @@ export function GameStateProvider({
           method: "POST",
           body: JSON.stringify({ taskId: id }),
         });
+        if (response.status === 409) {
+          const message = await failureMessage(response, "");
+          if (breakdownFailureIsQuiet(response.status, message)) {
+            await refresh();
+            return;
+          }
+          throw new Error(message || "The ghost could not break that down.");
+        }
         if (!response.ok) {
           throw new Error(await failureMessage(response, "The ghost could not break that down."));
         }

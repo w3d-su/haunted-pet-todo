@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { resolveBreakdown } from "@/lib/ai/breakdown";
+import { BREAKDOWN_CLAIM_LOST } from "@/lib/ai/messages";
 import { completeJson } from "@/lib/ai/llm";
 import type { Task } from "@/lib/game/tasks";
 import { productionDeps } from "@/lib/server/production";
@@ -49,48 +50,59 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
     }
 
     const claimed = await stores.tasks.claimBreakdown(task.id, stores.userId);
-    if (!claimed) return conflict("That task can no longer be broken down");
+    if (!claimed) return conflict(BREAKDOWN_CLAIM_LOST);
 
-    const allowed = await stores.budget.take(stores.userId, deps.now());
-    const resolved = await resolveBreakdown(
-      claimed,
-      allowed ? deps.completeJson : async () => null,
-    );
     const created: Task[] = [];
-    for (let index = 0; index < resolved.body.subtasks.length; index += 1) {
-      const title = resolved.body.subtasks[index];
-      if (!title) continue;
-      const saved = await stores.tasks.upsertTask({
-        id: deps.newId(),
-        userId: stores.userId,
-        title,
-        notes: null,
-        category: task.category,
-        size: "small",
-        status: "todo",
-        dueAt: null,
-        completedAt: null,
-        deletedAt: null,
-        parentId: task.id,
-        breakdownSuggested: false,
-        allSubtasksDone: false,
-        sortOrder: index + 1,
-        createdAt: world.now,
+    try {
+      const allowed = await stores.budget.take(stores.userId, deps.now());
+      const resolved = await resolveBreakdown(
+        claimed,
+        allowed ? deps.completeJson : async () => null,
+      );
+      for (let index = 0; index < resolved.body.subtasks.length; index += 1) {
+        const title = resolved.body.subtasks[index];
+        if (!title) continue;
+        const saved = await stores.tasks.upsertTask({
+          id: deps.newId(),
+          userId: stores.userId,
+          title,
+          notes: null,
+          category: task.category,
+          size: "small",
+          status: "todo",
+          dueAt: null,
+          completedAt: null,
+          deletedAt: null,
+          parentId: task.id,
+          breakdownSuggested: false,
+          allSubtasksDone: false,
+          sortOrder: index + 1,
+          createdAt: world.now,
+        });
+        created.push(saved);
+        await stores.events.appendEvent(stores.userId, "TASK_CREATED", {
+          taskId: saved.id,
+          title: saved.title,
+          parentId: task.id,
+          at: world.now,
+        });
+      }
+      return json({
+        intro: resolved.body.intro,
+        subtasks: created.map((item) => item.title),
+        source: resolved.source,
+        task: claimed,
       });
-      created.push(saved);
-      await stores.events.appendEvent(stores.userId, "TASK_CREATED", {
-        taskId: saved.id,
-        title: saved.title,
-        parentId: task.id,
-        at: world.now,
-      });
+    } catch (error) {
+      if (created.length === 0) {
+        try {
+          await stores.tasks.releaseBreakdown(task.id, stores.userId);
+        } catch (releaseError) {
+          console.error(releaseError);
+        }
+      }
+      return storageFailure(error);
     }
-    return json({
-      intro: resolved.body.intro,
-      subtasks: created.map((item) => item.title),
-      source: resolved.source,
-      task: claimed,
-    });
   } catch (error) {
     return storageFailure(error);
   }

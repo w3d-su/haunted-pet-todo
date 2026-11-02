@@ -11,6 +11,7 @@ import {
 import {
   claimBreakdown,
   getTasks,
+  releaseBreakdown,
   markOverdue,
   softDeleteTask,
   updateOpen,
@@ -40,6 +41,7 @@ function serviceStores(userId: string): AuthedStores {
       updateOpen: (task) => updateOpen(writer, task),
       softDeleteTask: (taskId, id, now) => softDeleteTask(writer, taskId, id, now),
       claimBreakdown: (taskId, id) => claimBreakdown(writer, taskId, id),
+      releaseBreakdown: (taskId, id) => releaseBreakdown(writer, taskId, id),
     },
     events: {
       appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),
@@ -88,6 +90,7 @@ export function productionDeps(): AppDeps {
             updateOpen: (task) => updateOpen(writer, task),
             softDeleteTask: (taskId, id, now) => softDeleteTask(writer, taskId, id, now),
             claimBreakdown: (taskId, id) => claimBreakdown(writer, taskId, id),
+            releaseBreakdown: (taskId, id) => releaseBreakdown(writer, taskId, id),
           },
           events: {
             appendEvent: (id, eventType, payload) => appendEvent(writer, id, eventType, payload),

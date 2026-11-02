@@ -64,4 +64,9 @@ it("uses the fixed epitaph when the model is missing or invalid", async () => {
     epitaph: "Here lies Spooky,\nslain by <b>dishes</b> https://evil.example",
   }));
   expect(stripped.epitaph).toBe("Here lies Spooky,\nslain by dishes");
+  const links = await resolveEpitaph(pet, [], async () => ({
+    epitaph: "Here lies Spooky,\nsee www.evil.test and javascript:alert(1)",
+  }));
+  expect(links.epitaph).toBe("Here lies Spooky,\nsee and alert(1)");
+  expect(links.epitaph).not.toMatch(/www\.|javascript:/);
 });

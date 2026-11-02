@@ -1,7 +1,9 @@
 import { expect, it } from "vitest";
+import { addressIsBlocked, createPushLookup } from "@/lib/push/agent";
 import {
   allowedPushEndpoint,
   base64UrlByteLength,
+  normalizedPushEndpoint,
   validPushKeys,
 } from "@/lib/push/endpoint";
 
@@ -17,6 +19,44 @@ it("accepts only https hosts from the push services", () => {
   expect(allowedPushEndpoint("https://evilfcm.googleapis.com/fcm/send/abc")).toBe(false);
   expect(allowedPushEndpoint("https://fcm.googleapis.com.attacker.com/fcm/send/abc")).toBe(false);
   expect(allowedPushEndpoint("https://user:pass@fcm.googleapis.com/fcm/send/abc")).toBe(false);
+  expect(allowedPushEndpoint("https://127.0.0.3;.fcm.googleapis.com/x")).toBe(false);
+  expect(allowedPushEndpoint("https://fcm%2egoogleapis%2ecom/x")).toBe(false);
+  expect(allowedPushEndpoint("https://fcm.googleapis.com:443/x")).toBe(false);
+});
+
+it("normalizes a stored endpoint to the WHATWG href", () => {
+  expect(normalizedPushEndpoint("https://fcm.googleapis.com/fcm/send/abc")).toBe(
+    "https://fcm.googleapis.com/fcm/send/abc",
+  );
+  expect(normalizedPushEndpoint("https://127.0.0.3;.fcm.googleapis.com/x")).toBeNull();
+  expect(normalizedPushEndpoint("https://fcm%2egoogleapis%2ecom/x")).toBeNull();
+});
+
+it("rejects a resolved private address before the push agent connects", () => {
+  expect(addressIsBlocked("127.0.0.1")).toBe(true);
+  expect(addressIsBlocked("10.1.2.3")).toBe(true);
+  expect(addressIsBlocked("192.168.1.1")).toBe(true);
+  expect(addressIsBlocked("172.16.0.1")).toBe(true);
+  expect(addressIsBlocked("169.254.169.254")).toBe(true);
+  expect(addressIsBlocked("0.0.0.0")).toBe(true);
+  expect(addressIsBlocked("::1")).toBe(true);
+  expect(addressIsBlocked("::")).toBe(true);
+  expect(addressIsBlocked("fe80::1")).toBe(true);
+  expect(addressIsBlocked("fc00::1")).toBe(true);
+  expect(addressIsBlocked("::ffff:127.0.0.1")).toBe(true);
+  expect(addressIsBlocked("8.8.8.8")).toBe(false);
+
+  const lookup = createPushLookup(((
+    _hostname: string,
+    _options: unknown,
+    callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void,
+  ) => {
+    callback(null, "127.0.0.1", 4);
+  }) as never);
+  lookup("fcm.googleapis.com", {}, (err) => {
+    expect(err).toBeTruthy();
+    expect(err?.code).toBe("EBLOCKED");
+  });
 });
 
 it("measures base64url key sizes", () => {

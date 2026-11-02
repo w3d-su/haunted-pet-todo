@@ -197,6 +197,21 @@ export async function claimBreakdown(
   return taskFromRow(data);
 }
 
+/** Undo a claim that failed before any subtask was written. */
+export async function releaseBreakdown(
+  supabase: SupabaseClient,
+  taskId: string,
+  userId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("tasks")
+    .update({ breakdown_suggested: false })
+    .eq("id", taskId)
+    .eq("user_id", userId)
+    .eq("breakdown_suggested", true);
+  throwOnError(error);
+}
+
 export async function softDeleteTask(
   supabase: SupabaseClient,
   taskId: string,

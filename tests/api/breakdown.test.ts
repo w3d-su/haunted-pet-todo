@@ -1,5 +1,7 @@
 import { expect, it } from "vitest";
 import { postBreakdown, type BreakdownDeps } from "@/app/api/ai/breakdown/handlers";
+import { breakdownFailureIsQuiet } from "@/components/tasks/breakdown-ui";
+import { BREAKDOWN_CLAIM_LOST } from "@/lib/ai/messages";
 import { createMemoryWorld, request, USER_ID } from "../helpers/world";
 
 const NOW = Date.UTC(2026, 6, 4, 8);
@@ -127,4 +129,36 @@ it("uses the fallback when the daily cap is spent and refuses a done task", asyn
   );
   expect(refused.status).toBe(409);
   expect(doneWorld.tasks.filter((item) => item.parentId === doneTask.id)).toHaveLength(0);
+});
+
+it("releases the claim when subtasks are not written", async () => {
+  const world = createMemoryWorld();
+  const { postTask } = await import("@/app/api/tasks/handlers");
+  const created = await postTask(
+    request("POST", "/api/tasks", { title: "Write research paper", size: "large" }),
+    world.deps(USER_ID, NOW),
+  );
+  const { task } = (await created.json()) as { task: { id: string } };
+  const response = await postBreakdown(request("POST", "/api/ai/breakdown", { taskId: task.id }), {
+    ...deps(world),
+    completeJson: async () => {
+      throw new Error("model down");
+    },
+  });
+  expect(response.status).toBe(500);
+  expect(world.tasks.find((item) => item.id === task.id)?.breakdownSuggested).toBe(false);
+  expect(world.tasks.filter((item) => item.parentId === task.id)).toHaveLength(0);
+
+  const retry = await postBreakdown(
+    request("POST", "/api/ai/breakdown", { taskId: task.id }),
+    deps(world),
+  );
+  expect(retry.status).toBe(200);
+  expect(world.tasks.filter((item) => item.parentId === task.id).length).toBeGreaterThanOrEqual(3);
+});
+
+it("does not treat a lost claim as an error the player should see", () => {
+  expect(breakdownFailureIsQuiet(409, BREAKDOWN_CLAIM_LOST)).toBe(true);
+  expect(breakdownFailureIsQuiet(409, "A done task cannot be broken down")).toBe(false);
+  expect(breakdownFailureIsQuiet(500, BREAKDOWN_CLAIM_LOST)).toBe(false);
 });
