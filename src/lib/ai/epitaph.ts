@@ -1,5 +1,5 @@
 import { EpitaphResponseSchema } from "@/lib/ai/schemas";
-import { quoteForPrompt } from "@/lib/ai/text";
+import { plainEpitaph, quoteForPrompt } from "@/lib/ai/text";
 import { FALLBACK_EPITAPH, type PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 
@@ -44,7 +44,13 @@ export async function resolveEpitaph(
   completeJson: (prompt: string) => Promise<unknown | null>,
 ): Promise<{ epitaph: string; source: "llm" | "fallback" }> {
   const raw = await completeJson(buildEpitaphPrompt(pet, tasks));
-  const parsed = EpitaphResponseSchema.safeParse(raw);
+  const epitaph =
+    raw !== null && typeof raw === "object" && "epitaph" in raw && typeof raw.epitaph === "string"
+      ? plainEpitaph(raw.epitaph)
+      : raw;
+  const parsed = EpitaphResponseSchema.safeParse(
+    epitaph === raw ? raw : { epitaph },
+  );
   const text = parsed.success ? normalizeEpitaph(parsed.data.epitaph) : null;
   if (!text) return { epitaph: FALLBACK_EPITAPH, source: "fallback" };
   return { epitaph: text, source: "llm" };

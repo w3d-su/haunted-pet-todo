@@ -32,6 +32,11 @@ export interface TaskStore {
    */
   updateOpen(task: Task): Promise<Task | null>;
   softDeleteTask(taskId: string, userId: string, now: number): Promise<Task | null>;
+  /**
+   * Set `breakdownSuggested` only while it is false and the task is not done.
+   * Returns null when another request already claimed it, or the task is done.
+   */
+  claimBreakdown(taskId: string, userId: string): Promise<Task | null>;
 }
 
 export interface CompletionCommit {
@@ -76,6 +81,16 @@ export interface PushStore {
   remove(userId: string, endpoint: string): Promise<void>;
 }
 
+export interface NagStore {
+  /** True the first time this local day is claimed. */
+  claimDay(userId: string, day: string): Promise<boolean>;
+}
+
+export interface BudgetStore {
+  /** True when this model attempt is inside the user and site caps. */
+  take(userId: string, now: number): Promise<boolean>;
+}
+
 export interface ClockShift {
   /** Non-negative offset stored on the pet row. */
   readonly clockOffsetMs: number;
@@ -92,6 +107,8 @@ export interface AuthedStores {
   readonly tasks: TaskStore;
   readonly events: EventStore;
   readonly push: PushStore;
+  readonly nags: NagStore;
+  readonly budget: BudgetStore;
   /**
    * Claim the task, CAS the pet, and insert events in one transaction.
    * A version miss rolls everything back (`retry`). Already done is `conflict`.

@@ -10,8 +10,11 @@
  */
 import { Pool } from "pg";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
+import { postBreakdown } from "@/app/api/ai/breakdown/handlers";
 import { getTasksRoute, patchTask, postTask } from "@/app/api/tasks/handlers";
+import { takeAiBudget } from "@/lib/db/ai-budget";
 import { commitCompletion } from "@/lib/db/completion";
+import { claimNagDay } from "@/lib/db/nag";
 import { appendEvent, listEvents } from "@/lib/db/events";
 import { getPetRecord, savePetState, setClockOffset } from "@/lib/db/pet";
 import {
@@ -19,7 +22,14 @@ import {
   listPushSubscriptions,
   upsertPushSubscription,
 } from "@/lib/db/push";
-import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
+import {
+  claimBreakdown,
+  getTasks,
+  markOverdue,
+  softDeleteTask,
+  updateOpen,
+  upsertTask,
+} from "@/lib/db/tasks";
 import { SystemClock } from "@/lib/server/clock";
 import type { AppDeps } from "@/lib/server/stores";
 import { request, USER_ID } from "../helpers/world";
@@ -65,6 +75,7 @@ function pgDeps(pool: Pool): AppDeps {
         markOverdue: (taskId, id) => markOverdue(supabase, taskId, id),
         updateOpen: (task) => updateOpen(supabase, task),
         softDeleteTask: (taskId, id, now) => softDeleteTask(supabase, taskId, id, now),
+        claimBreakdown: (taskId, id) => claimBreakdown(supabase, taskId, id),
       },
       events: {
         appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),
@@ -74,6 +85,12 @@ function pgDeps(pool: Pool): AppDeps {
         list: (id) => listPushSubscriptions(supabase, id),
         upsert: (id, subscription) => upsertPushSubscription(supabase, id, subscription),
         remove: (id, endpoint) => deletePushSubscription(supabase, id, endpoint),
+      },
+      nags: {
+        claimDay: (id, day) => claimNagDay(supabase, id, day),
+      },
+      budget: {
+        take: (id, at) => takeAiBudget(supabase, id, at),
       },
       commitCompletion: (input) => commitCompletion(supabase, input),
       setClockOffset: (id, shift) =>
@@ -187,5 +204,32 @@ describeDb("postgres concurrency", () => {
     const hp = Number(pet.rows[0]?.hp);
     expect(hp).toBeGreaterThan(49);
     expect(hp).toBeLessThanOrEqual(50);
+  });
+
+  it("lets one breakdown claim create the subtasks", async () => {
+    await resetRows();
+    const deps = pgDeps(pool);
+    const created = await postTask(
+      request("POST", "/api/tasks", { title: "Write research paper", size: "large" }),
+      deps,
+    );
+    expect(created.status).toBe(201);
+    const { task } = (await created.json()) as { task: { id: string } };
+    const responses = await Promise.all(
+      Array.from({ length: 6 }, () =>
+        postBreakdown(request("POST", "/api/ai/breakdown", { taskId: task.id }), {
+          ...deps,
+          completeJson: async () => null,
+        }),
+      ),
+    );
+    const statuses = responses.map((response) => response.status);
+    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
+    expect(statuses.filter((status) => status === 409)).toHaveLength(5);
+    const children = await pool.query("select title from public.tasks where parent_id = $1", [
+      task.id,
+    ]);
+    expect(children.rows.length).toBeGreaterThanOrEqual(3);
+    expect(children.rows.length).toBeLessThanOrEqual(7);
   });
 });

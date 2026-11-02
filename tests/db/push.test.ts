@@ -4,11 +4,14 @@
  */
 import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { takeAiBudget } from "@/lib/db/ai-budget";
+import { claimNagDay } from "@/lib/db/nag";
 import {
   deletePushSubscription,
   listPushSubscriptions,
   upsertPushSubscription,
 } from "@/lib/db/push";
+import { PushCapError } from "@/lib/server/http";
 import { USER_ID } from "../helpers/world";
 import { assertSafeTestDatabase } from "./guard";
 import { createPgSupabase } from "./pg-supabase";
@@ -50,6 +53,39 @@ describeDb("postgres push subscriptions", () => {
     ]);
     await deletePushSubscription(supabase, USER_ID, "https://push.example/haunt");
     expect(await listPushSubscriptions(supabase, USER_ID)).toEqual([]);
+  });
+
+  it("refuses a sixth subscription and counts model calls once", async () => {
+    await pool.query("truncate public.push_subscriptions, public.ai_budget, public.user_nag");
+    for (let index = 0; index < 5; index += 1) {
+      await upsertPushSubscription(supabase, USER_ID, {
+        endpoint: `https://fcm.googleapis.com/fcm/send/${index}`,
+        p256dh: "k",
+        auth: "a",
+      });
+    }
+    await expect(
+      upsertPushSubscription(supabase, USER_ID, {
+        endpoint: "https://fcm.googleapis.com/fcm/send/sixth",
+        p256dh: "k",
+        auth: "a",
+      }),
+    ).rejects.toBeInstanceOf(PushCapError);
+    expect(await listPushSubscriptions(supabase, USER_ID)).toHaveLength(5);
+
+    expect(await takeAiBudget(supabase, USER_ID, Date.UTC(2026, 6, 4))).toBe(true);
+    process.env.AI_DAILY_CAP = "1";
+    try {
+      expect(await takeAiBudget(supabase, USER_ID, Date.UTC(2026, 6, 4))).toBe(false);
+    } finally {
+      delete process.env.AI_DAILY_CAP;
+    }
+    const used = await pool.query("select used from public.ai_budget where scope = 'site'");
+    expect(used.rows[0]?.used).toBe(1);
+
+    expect(await claimNagDay(supabase, USER_ID, "2026-07-04")).toBe(true);
+    expect(await claimNagDay(supabase, USER_ID, "2026-07-04")).toBe(false);
+    expect(await claimNagDay(supabase, USER_ID, "2026-07-05")).toBe(true);
   });
 
   it("lets authenticated clients select and not write", async () => {

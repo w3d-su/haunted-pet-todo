@@ -626,8 +626,11 @@ it("reset pulls lastCompletionDay back with the completion instant", () => {
 it("P17 a breakdown that parses has 3 to 7 subtasks", () => {
   check(
     fc.property(
-      fc.string({ maxLength: 140 }),
-      fc.array(fc.string({ minLength: 1, maxLength: 80 }), { minLength: 3, maxLength: 7 }),
+      fc.string({ minLength: 1, maxLength: 140 }).filter((value) => value.trim().length > 0),
+      fc.array(
+        fc.string({ minLength: 1, maxLength: 80 }).filter((value) => value.trim().length > 0),
+        { minLength: 3, maxLength: 7 },
+      ),
       (intro, subtasks) => {
         const parsed = BreakdownResponseSchema.safeParse({ intro, subtasks });
         expect(parsed.success).toBe(true);

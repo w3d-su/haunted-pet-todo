@@ -60,7 +60,7 @@
   - [x] 6.3 For each user: run the same catch-up as a read (`syncWorld` / `catchUp`), which marks newly overdue tasks and applies decay plus zombie drain
   - [x] 6.4 Zombie drain is part of that catch-up (eggs still take none), not a second copy of the reducer
   - [x] 6.5 Save updated `PetState` and append events to `events` table
-  - [x] 6.6 If pet newly dead, enqueue epitaph generation (POST to `/api/ai/epitaph`).
+  - [x] 6.6 If pet newly dead, count the death. The epitaph route runs when the tombstone is viewed, not inside the cron, so a crowd of deaths cannot call the model.
   - [x] 6.7 Return HTTP 200 with `{ processed: N, deaths: K }` summary
     - Files: `src/app/api/cron/decay/route.ts`
   _Requirements: 5.1, 5.2, 6.1–6.5_
@@ -100,7 +100,7 @@
 - [x] 11. (Week 3) Implement `src/lib/push/vapid.ts` and `notify.ts`
   - [x] 11.1 Implement `getVapidKeys()` reading from `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`
   - [x] 11.2 Implement `sendPushNotification(subscription, payload)` using `web-push` package
-  - [x] 11.3 Wrap `webpush.sendNotification` in try/catch; log errors without throwing
+  - [x] 11.3 Wrap `webpush.sendNotification` in try/catch; log errors without throwing. A 404 or 410 is returned as `gone` so the cron deletes that row (requirement 9.3).
     - Files: `src/lib/push/vapid.ts`, `src/lib/push/notify.ts`
   _Requirements: 10.3, 10.4_
 
@@ -115,11 +115,11 @@
     - Files: `supabase/migrations/0003_push.sql`
   _Requirements: 9.2, 9.3_
 
-- [x] 14. (Week 3) Add habitual-time push logic to cron handler
-  - [x] 14.1 Implement `computeHabitualHour(events)` pure helper: given last 30 `TASK_COMPLETED` events, returns the most common hour-of-day (0–23)
-  - [x] 14.2 In cron handler: compare current hour to habitual hour; send push if match AND no tasks completed today
-  - [x] 14.3 Build nag message string using `buildNagPrompt` (from `src/lib/ai/nag.ts`) appropriate to pet's `NagLevel`
-    - Files: `src/lib/game/decay.ts` (helper), `src/app/api/cron/decay/route.ts`
+- [x] 14. (Week 3) Add a once-a-day nag to the cron handler
+  - [x] 14.1 Hobby only allows a daily cron, so there is no habitual-hour send. `claim_nag_day` stores the user's local day and a second run the same day does not send.
+  - [x] 14.2 In the cron handler: send when the user has an open task, nothing was completed today in the pet's time zone, and the day was just claimed
+  - [x] 14.3 Build the nag with `buildNagPrompt` (from `src/lib/ai/nag.ts`) for the pet's `NagLevel`
+    - Files: `src/lib/db/nag.ts`, `src/app/api/cron/decay/route.ts`, `supabase/migrations/0005_nag_and_budget.sql`
   _Requirements: 10.1–10.4_
 
 - [x] 15. (Week 3) Add push subscription UI in `GameStateProvider`

@@ -24,6 +24,8 @@ interface GameValue {
 }
 
 const GameContext = createContext<GameValue | null>(null);
+/** One epitaph request per death. A failed call is not retried on the next refresh. */
+const epitaphTried = new Set<string>();
 
 export function useGameState(): GameValue {
   const value = useContext(GameContext);
@@ -131,7 +133,13 @@ export function GameStateProvider({
     };
     const taskBody = (await taskResponse.json()) as { tasks: TaskView[]; now: number };
     let nextPet = petBody.pet;
-    if (nextPet.status !== "tombstone" && hpSpent(nextPet.hp)) {
+    const deathKey = `${nextPet.id}:${nextPet.diedAt ?? "spent"}`;
+    if (
+      nextPet.status !== "tombstone" &&
+      hpSpent(nextPet.hp) &&
+      !epitaphTried.has(deathKey)
+    ) {
+      epitaphTried.add(deathKey);
       try {
         const epitaph = await authed("/api/ai/epitaph", { method: "POST", body: "{}" });
         if (epitaph.ok) {

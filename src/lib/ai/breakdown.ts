@@ -1,5 +1,5 @@
 import { BreakdownResponseSchema, type BreakdownResponse } from "@/lib/ai/schemas";
-import { quoteForPrompt } from "@/lib/ai/text";
+import { plainLine, quoteForPrompt } from "@/lib/ai/text";
 import type { Task } from "@/lib/game/tasks";
 
 const FALLBACK_INTRO = "Oooh a big one 👻 Let me break this haunting task down for you…";
@@ -43,7 +43,17 @@ export async function resolveBreakdown(
   completeJson: (prompt: string) => Promise<unknown | null>,
 ): Promise<{ body: BreakdownResponse; source: "llm" | "fallback" }> {
   const raw = await completeJson(buildBreakdownPrompt(task));
-  const parsed = BreakdownResponseSchema.safeParse(raw);
+  const record = raw !== null && typeof raw === "object" ? (raw as { intro?: unknown; subtasks?: unknown }) : null;
+  const parsed = BreakdownResponseSchema.safeParse(
+    record
+      ? {
+          intro: typeof record.intro === "string" ? plainLine(record.intro) : record.intro,
+          subtasks: Array.isArray(record.subtasks)
+            ? record.subtasks.map((item) => (typeof item === "string" ? plainLine(item) : item))
+            : record.subtasks,
+        }
+      : raw,
+  );
   if (!parsed.success) return { body: fallbackBreakdown(task), source: "fallback" };
   return { body: parsed.data, source: "llm" };
 }

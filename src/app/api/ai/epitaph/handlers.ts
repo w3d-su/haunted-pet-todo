@@ -12,7 +12,6 @@ import {
   unauthorized,
 } from "@/lib/server/http";
 import { productionDeps, productionServiceStores } from "@/lib/server/production";
-import { allowAi } from "@/lib/server/rate-limit";
 import { bearerMatchesSecret } from "@/lib/server/secret";
 import type { AppDeps, AuthedStores } from "@/lib/server/stores";
 import { syncWorld } from "@/lib/server/sync";
@@ -23,7 +22,6 @@ export interface EpitaphDeps extends AppDeps {
   readonly cronSecret: string | undefined;
   storesFor(userId: string): Promise<AuthedStores>;
   completeJson(prompt: string): Promise<unknown | null>;
-  allow(bucket: string, now: number): boolean;
 }
 
 /**
@@ -51,10 +49,12 @@ export async function postEpitaph(request: Request, deps: EpitaphDeps): Promise<
     if (world.pet.status !== "dead" && !hpSpent(world.pet.hp)) {
       return conflict("The pet is still with us");
     }
-    if (!deps.allow(`epitaph:${stores.userId}`, deps.now())) {
-      return json({ error: "Too many epitaphs" }, 429, { "Retry-After": "60" });
-    }
-    const resolved = await resolveEpitaph(world.pet, world.tasks, deps.completeJson);
+    const allowed = await stores.budget.take(stores.userId, deps.now());
+    const resolved = await resolveEpitaph(
+      world.pet,
+      world.tasks,
+      allowed ? deps.completeJson : async () => null,
+    );
     const reduction = applyPetEvent(
       world.pet,
       { type: "EPITAPH_READY", epitaph: resolved.epitaph },
@@ -100,6 +100,5 @@ export function productionEpitaphDeps(): EpitaphDeps {
     cronSecret: serverEnv("CRON_SECRET"),
     storesFor: (userId) => Promise.resolve(productionServiceStores(userId)),
     completeJson,
-    allow: allowAi,
   };
 }

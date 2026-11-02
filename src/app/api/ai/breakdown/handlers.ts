@@ -3,7 +3,6 @@ import { resolveBreakdown } from "@/lib/ai/breakdown";
 import { completeJson } from "@/lib/ai/llm";
 import type { Task } from "@/lib/game/tasks";
 import { productionDeps } from "@/lib/server/production";
-import { allowAi } from "@/lib/server/rate-limit";
 import {
   badRequest,
   conflict,
@@ -20,7 +19,6 @@ const BreakdownBodySchema = z.object({ taskId: z.uuid() }).strict();
 
 export interface BreakdownDeps extends AppDeps {
   completeJson(prompt: string): Promise<unknown | null>;
-  allow(bucket: string, now: number): boolean;
 }
 
 export async function postBreakdown(request: Request, deps: BreakdownDeps): Promise<Response> {
@@ -39,12 +37,10 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
     const task = world.tasks.find((item) => item.id === parsed.data.taskId);
     if (!task || task.userId !== stores.userId) return notFound("Task not found");
     if (task.size !== "large") return conflict("Only a large task can be broken down");
+    if (task.status === "done") return conflict("A done task cannot be broken down");
 
     const children = world.tasks.filter((item) => item.parentId === task.id);
     if (children.length > 0) {
-      if (!task.breakdownSuggested) {
-        await stores.tasks.updateOpen({ ...task, breakdownSuggested: true });
-      }
       return json({
         intro: "These steps are already waiting 👻",
         subtasks: children.map((item) => item.title),
@@ -52,11 +48,14 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
       });
     }
 
-    if (!deps.allow(`breakdown:${stores.userId}`, deps.now())) {
-      return json({ error: "Too many breakdowns" }, 429, { "Retry-After": "60" });
-    }
+    const claimed = await stores.tasks.claimBreakdown(task.id, stores.userId);
+    if (!claimed) return conflict("That task can no longer be broken down");
 
-    const resolved = await resolveBreakdown(task, deps.completeJson);
+    const allowed = await stores.budget.take(stores.userId, deps.now());
+    const resolved = await resolveBreakdown(
+      claimed,
+      allowed ? deps.completeJson : async () => null,
+    );
     const created: Task[] = [];
     for (let index = 0; index < resolved.body.subtasks.length; index += 1) {
       const title = resolved.body.subtasks[index];
@@ -86,13 +85,11 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
         at: world.now,
       });
     }
-    const flagged = await stores.tasks.updateOpen({ ...task, breakdownSuggested: true });
-    if (!flagged) return conflict("That task can no longer be broken down");
     return json({
       intro: resolved.body.intro,
       subtasks: created.map((item) => item.title),
       source: resolved.source,
-      task: flagged,
+      task: claimed,
     });
   } catch (error) {
     return storageFailure(error);
@@ -101,5 +98,5 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
 
 export function productionBreakdownDeps(): BreakdownDeps {
   const base = productionDeps();
-  return { ...base, completeJson, allow: allowAi };
+  return { ...base, completeJson };
 }

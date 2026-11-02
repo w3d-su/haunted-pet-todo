@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { PushCapError } from "@/lib/server/http";
 import type { PushSubscription } from "@/lib/server/stores";
 
 const PushRowSchema = z.object({
@@ -42,6 +43,7 @@ export async function upsertPushSubscription(
     },
     { onConflict: "user_id,endpoint" },
   );
+  if (error?.message.includes("push subscription cap")) throw new PushCapError();
   throwOnError(error);
 }
 

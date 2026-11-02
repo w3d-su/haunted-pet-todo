@@ -146,18 +146,18 @@ _User Story_: As a user, I want to subscribe to browser push notifications so th
 
 - 9.1: WHEN a user grants notification permission, THEN the system SHALL POST the `PushSubscription` object to `POST /api/push`.
 - 9.2: WHEN the push subscription is stored, THEN the system SHALL persist it in the `push_subscriptions` table associated with the user's `user_id`.
-- 9.3: WHEN the user revokes permission or the subscription expires, THEN the system SHALL remove the row from `push_subscriptions`.
+- 9.3: WHEN the user revokes permission, or the push service answers 404 or 410, THEN the system SHALL remove the row from `push_subscriptions`.
 
-**Requirement 10 — Habitual-time reminder**
+**Requirement 10 — Daily reminder**
 
-_User Story_: As a user, I want to receive a push notification at the time of day when I most often complete tasks so that the reminder arrives when I am most likely to act on it.
+_User Story_: As a user, I want one reminder a day while work is still open so that the pet nags me without waiting for an hourly cron. Vercel Hobby only allows a daily cron.
 
 **Acceptance Criteria**:
 
-- 10.1: WHEN the cron job runs, THEN the system SHALL inspect the user's last 30 `TASK_COMPLETED` events to compute the most common hour-of-day for completions.
-- 10.2: IF the current hour matches the computed habitual hour AND the user has an active push subscription AND no task has been completed today, THEN the system SHALL send a push notification with a nag message appropriate to the pet's current `NagLevel`.
-- 10.3: WHEN a push notification is sent, THEN the system SHALL use the `sendPushNotification` helper from `src/lib/push/notify.ts`, passing the VAPID keys from environment variables.
-- 10.4: IF the push send fails, THEN the system SHALL log the error and continue without crashing the cron job.
+- 10.1: WHEN the daily cron runs, THEN the system SHALL consider each user at most once for that user's local calendar day.
+- 10.2: IF the user has an open task AND nothing was completed today in the pet's time zone AND a nag was not already sent that local day AND a push subscription is stored, THEN the system SHALL send one nag with `buildNagPrompt` for the pet's `NagLevel`.
+- 10.3: WHEN a push notification is sent, THEN the system SHALL use `sendPushNotification` from `src/lib/push/notify.ts`, with the VAPID keys from environment variables and a 5 second timeout.
+- 10.4: IF the push send fails, THEN the system SHALL log the error and continue. IF the push service returns 404 or 410, THEN the system SHALL delete that subscription.
 
 ---
 

@@ -60,4 +60,8 @@ it("uses the fixed epitaph when the model is missing or invalid", async () => {
     epitaph: "Here lies Spooky,\nslain by dishes",
     source: "llm",
   });
+  const stripped = await resolveEpitaph(pet, [], async () => ({
+    epitaph: "Here lies Spooky,\nslain by <b>dishes</b> https://evil.example",
+  }));
+  expect(stripped.epitaph).toBe("Here lies Spooky,\nslain by dishes");
 });

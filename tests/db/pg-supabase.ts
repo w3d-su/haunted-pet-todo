@@ -248,6 +248,30 @@ export function createPgSupabase(pool: Pool): SupabaseClient {
       return new Query(pool, table);
     },
     async rpc(fn: string, args: Record<string, unknown> = {}) {
+      if (fn === "take_ai_budget") {
+        try {
+          const result = await pool.query(
+            `select public.take_ai_budget($1::uuid, $2::date, $3::integer, $4::integer) as ok`,
+            [args.p_user_id, args.p_day, args.p_user_cap, args.p_site_cap],
+          );
+          return { data: result.rows[0]?.ok ?? false, error: null };
+        } catch (error) {
+          const err = error as { message?: string; code?: string };
+          return { data: null, error: { message: err.message ?? "rpc failed", code: err.code } };
+        }
+      }
+      if (fn === "claim_nag_day") {
+        try {
+          const result = await pool.query(
+            `select public.claim_nag_day($1::uuid, $2::date) as ok`,
+            [args.p_user_id, args.p_day],
+          );
+          return { data: result.rows[0]?.ok ?? false, error: null };
+        } catch (error) {
+          const err = error as { message?: string; code?: string };
+          return { data: null, error: { message: err.message ?? "rpc failed", code: err.code } };
+        }
+      }
       if (fn !== "complete_task") {
         return { data: null, error: { message: `Unknown rpc ${fn}` } };
       }

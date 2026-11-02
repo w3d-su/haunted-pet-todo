@@ -2,11 +2,16 @@ import { petRecordFromRow, petStateToRow } from "@/lib/db/pet";
 import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 import { clampFuturePetTimes, type PetState } from "@/lib/game/pet";
 import { clampFutureTaskTimes, type Task } from "@/lib/game/tasks";
+import { budgetDay, USER_AI_DAILY_CAP, siteAiDailyCap } from "@/lib/db/ai-budget";
+import { MAX_PUSH_SUBSCRIPTIONS } from "@/lib/push/endpoint";
+import { PushCapError } from "@/lib/server/http";
 import type {
   AppDeps,
+  BudgetStore,
   CompletionCommit,
   CompletionResult,
   EventStore,
+  NagStore,
   PetSnapshot,
   PetStore,
   PushStore,
@@ -114,6 +119,21 @@ export function createMemoryWorld(): MemoryWorld {
       tasks[index] = deleted;
       return deleted;
     },
+    async claimBreakdown(taskId, userId) {
+      const index = tasks.findIndex((item) => item.id === taskId && item.userId === userId);
+      const current = tasks[index];
+      if (
+        !current ||
+        current.deletedAt !== null ||
+        current.status === "done" ||
+        current.breakdownSuggested
+      ) {
+        return null;
+      }
+      const claimed = persistTask({ ...current, breakdownSuggested: true });
+      tasks[index] = claimed;
+      return claimed;
+    },
   };
 
   const eventStore: EventStore = {
@@ -137,6 +157,10 @@ export function createMemoryWorld(): MemoryWorld {
       const index = pushes.findIndex(
         (row) => row.userId === userId && row.endpoint === subscription.endpoint,
       );
+      if (index === -1) {
+        const count = pushes.filter((row) => row.userId === userId).length;
+        if (count >= MAX_PUSH_SUBSCRIPTIONS) throw new PushCapError();
+      }
       const stored: StoredPush = { userId, ...subscription };
       if (index === -1) pushes.push(stored);
       else pushes[index] = stored;
@@ -144,6 +168,30 @@ export function createMemoryWorld(): MemoryWorld {
     async remove(userId, endpoint) {
       const index = pushes.findIndex((row) => row.userId === userId && row.endpoint === endpoint);
       if (index >= 0) pushes.splice(index, 1);
+    },
+  };
+
+  const nagDays = new Map<string, string>();
+  const nagStore: NagStore = {
+    async claimDay(userId, day) {
+      if (nagDays.get(userId) === day) return false;
+      nagDays.set(userId, day);
+      return true;
+    },
+  };
+
+  const spent = new Map<string, number>();
+  const budgetStore: BudgetStore = {
+    async take(userId, now) {
+      const day = budgetDay(now);
+      const siteKey = `site:${day}`;
+      const userKey = `user:${userId}:${day}`;
+      const site = spent.get(siteKey) ?? 0;
+      const user = spent.get(userKey) ?? 0;
+      if (site >= siteAiDailyCap() || user >= USER_AI_DAILY_CAP) return false;
+      spent.set(siteKey, site + 1);
+      spent.set(userKey, user + 1);
+      return true;
     },
   };
 
@@ -201,6 +249,8 @@ export function createMemoryWorld(): MemoryWorld {
                 tasks: taskStore,
                 events: eventStore,
                 push: pushStore,
+                nags: nagStore,
+                budget: budgetStore,
                 commitCompletion: (input) => commitCompletion(input),
                 async setClockOffset(id, shift) {
                   const existing = pets.get(id);

@@ -20,7 +20,6 @@ function deps(
       return stores;
     },
     completeJson: async () => null,
-    allow: () => true,
     ...extras,
   };
 }
@@ -107,7 +106,33 @@ it("stores the fallback epitaph without a model and keeps a later call idempoten
   expect(world.pets.get(USER_ID)?.state.currentEpitaph).toBe(FALLBACK_EPITAPH);
 });
 
-it("stores a valid model epitaph and rate-limits a dead pet", async () => {
+it("uses the fallback without calling the model when the daily cap is spent", async () => {
+  const world = createMemoryWorld();
+  deadPet(world);
+  let calls = 0;
+  const base = deps(world, {
+    completeJson: async () => {
+      calls += 1;
+      return { epitaph: "Here lies Spooky,\nslain by emails" };
+    },
+  });
+  const response = await postEpitaph(request("POST", "/api/ai/epitaph", {}), {
+    ...base,
+    authorize: async (incoming) => {
+      const stores = await base.authorize(incoming);
+      if (!stores) return null;
+      return { ...stores, budget: { take: async () => false } };
+    },
+  });
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { source: string; epitaph: string };
+  expect(body.source).toBe("fallback");
+  expect(body.epitaph).toBe(FALLBACK_EPITAPH);
+  expect(calls).toBe(0);
+  expect(world.pets.get(USER_ID)?.state.status).toBe("tombstone");
+});
+
+it("stores a valid model epitaph", async () => {
   const world = createMemoryWorld();
   deadPet(world);
   const verse = "Here lies Spooky,\nslain by emails";
@@ -118,14 +143,4 @@ it("stores a valid model epitaph and rate-limits a dead pet", async () => {
   expect(carved.status).toBe(200);
   expect(world.pets.get(USER_ID)?.state.currentEpitaph).toBe(verse);
   expect(world.events.some((event) => event.eventType === "EPITAPH_READY")).toBe(true);
-
-  const limited = createMemoryWorld();
-  deadPet(limited);
-  const response = await postEpitaph(
-    request("POST", "/api/ai/epitaph", {}),
-    deps(limited, { allow: () => false }),
-  );
-  expect(response.status).toBe(429);
-  expect(response.headers.get("retry-after")).toBe("60");
-  expect(limited.pets.get(USER_ID)?.state.status).toBe("dead");
 });

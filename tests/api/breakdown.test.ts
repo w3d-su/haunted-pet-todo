@@ -11,7 +11,6 @@ function deps(
   return {
     ...world.deps(USER_ID, NOW),
     completeJson: async () => null,
-    allow: () => true,
     ...extras,
   };
 }
@@ -83,26 +82,49 @@ it("creates 3 to 7 subtasks from the fallback and does not duplicate them", asyn
   expect(world.tasks.filter((item) => item.parentId === task.id)).toHaveLength(body.subtasks.length);
 });
 
-it("returns 429 before calling the model once the limit is spent", async () => {
+it("uses the fallback when the daily cap is spent and refuses a done task", async () => {
   const world = createMemoryWorld();
-  const { postTask } = await import("@/app/api/tasks/handlers");
+  const { postTask, patchTask } = await import("@/app/api/tasks/handlers");
   const created = await postTask(
     request("POST", "/api/tasks", { title: "Write research paper", size: "large" }),
     world.deps(USER_ID, NOW),
   );
   const { task } = (await created.json()) as { task: { id: string } };
   let calls = 0;
-  const response = await postBreakdown(
-    request("POST", "/api/ai/breakdown", { taskId: task.id }),
-    deps(world, {
-      allow: () => false,
-      completeJson: async () => {
-        calls += 1;
-        return null;
-      },
-    }),
-  );
-  expect(response.status).toBe(429);
+  const base = deps(world, {
+    completeJson: async () => {
+      calls += 1;
+      return null;
+    },
+  });
+  const response = await postBreakdown(request("POST", "/api/ai/breakdown", { taskId: task.id }), {
+    ...base,
+    authorize: async (incoming) => {
+      const stores = await base.authorize(incoming);
+      if (!stores) return null;
+      return { ...stores, budget: { take: async () => false } };
+    },
+  });
+  expect(response.status).toBe(200);
+  const body = (await response.json()) as { source: string; subtasks: string[] };
+  expect(body.source).toBe("fallback");
+  expect(body.subtasks.length).toBeGreaterThanOrEqual(3);
   expect(calls).toBe(0);
-  expect(world.tasks.find((item) => item.id === task.id)?.breakdownSuggested).toBe(false);
+
+  const doneWorld = createMemoryWorld();
+  const doneCreated = await postTask(
+    request("POST", "/api/tasks", { title: "Already finished", size: "large" }),
+    doneWorld.deps(USER_ID, NOW),
+  );
+  const doneTask = ((await doneCreated.json()) as { task: { id: string } }).task;
+  await patchTask(
+    request("PATCH", "/api/tasks", { id: doneTask.id, status: "done" }),
+    doneWorld.deps(USER_ID, NOW),
+  );
+  const refused = await postBreakdown(
+    request("POST", "/api/ai/breakdown", { taskId: doneTask.id }),
+    deps(doneWorld),
+  );
+  expect(refused.status).toBe(409);
+  expect(doneWorld.tasks.filter((item) => item.parentId === doneTask.id)).toHaveLength(0);
 });
