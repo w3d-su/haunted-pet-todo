@@ -50,14 +50,6 @@ export function createServiceClient(): SupabaseClient {
   });
 }
 
-/** Anon client for browser sign-in. Do not proxy anonymous sign-in through the server. */
-export function createAnonClient(): SupabaseClient {
-  const { url, anonKey } = readSupabaseEnv();
-  return createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
 export function bearerToken(request: Request): string | null {
   const header = request.headers.get("authorization");
   if (!header) return null;
