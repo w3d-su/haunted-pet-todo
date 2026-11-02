@@ -379,7 +379,8 @@ function applySegment(state: PetState, from: number, to: number, zombies: number
   if (state.status !== "alive" || to <= from) return unchanged(state);
   const hours = (to - from) / HOUR_MS;
   const hpRate = state.stage === "egg" ? 0 : DECAY_RATE_HP + zombies * ZOMBIE_DRAIN_PER_HOUR;
-  const dies = hpRate > 0 && state.hp <= hpRate * hours;
+  // A split of an exact kill can leave a few ulps of HP. That is still death.
+  const dies = hpRate > 0 && state.hp - hpRate * hours <= 1e-9;
   const effectUntil = dies ? hpReachedZeroAt(from, to, state.hp, hpRate) : to;
   const decayed = decayStats({ ...state, lastTickAt: from }, effectUntil);
   const emitted: GameEvent[] = [];

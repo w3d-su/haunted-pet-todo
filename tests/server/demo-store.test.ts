@@ -1,9 +1,13 @@
 import { expect, it } from "vitest";
-import { getPet } from "@/app/api/pet/handlers";
 import { POST as postDemoSession } from "@/app/api/demo/session/route";
+import { postTask } from "@/app/api/tasks/handlers";
+import { getPet } from "@/app/api/pet/handlers";
 import { initialPetState } from "@/lib/game/pet";
 import {
   DEMO_COOKIE,
+  DEMO_TASK_CAP,
+  DEMO_USER_CAP,
+  demoWorldForSession,
   dropDemoUser,
   memoryDemoAllowed,
   retainDemoUser,
@@ -12,7 +16,7 @@ import {
 } from "@/lib/server/demo-store";
 import { createMemoryWorld } from "@/lib/server/memory";
 import { productionDeps } from "@/lib/server/production";
-import { USER_ID } from "../helpers/world";
+import { request, USER_ID } from "../helpers/world";
 
 const envKeys = ["DEMO_MODE", "NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const;
 
@@ -97,7 +101,7 @@ it("rejects a forged demo cookie and does not keep a pet for it", async () => {
     );
     expect(session.status).toBe(200);
     const cookie = session.headers.get("set-cookie") ?? "";
-    expect(cookie).toContain("Secure");
+    expect(cookie).not.toMatch(/Secure/);
     const authed = await deps.authorize(
       new Request("http://localhost/api/pet", { headers: { cookie: cookie.split(";")[0] ?? "" } }),
     );
@@ -111,11 +115,11 @@ it("rejects a forged demo cookie and does not keep a pet for it", async () => {
   });
 });
 
-it("drops the oldest demo users once the cap is full", () => {
+it("refuses a new demo user when the cap is full and keeps the ones already in", () => {
   const world = createMemoryWorld();
   let touches: DemoTouch[] = [];
   const ids: string[] = [];
-  for (let index = 0; index < 5; index += 1) {
+  for (let index = 0; index < 3; index += 1) {
     const userId = `00000000-0000-4000-8000-00000000000${index}`;
     ids.push(userId);
     world.pets.set(userId, {
@@ -123,14 +127,109 @@ it("drops the oldest demo users once the cap is full", () => {
       clockOffsetMs: 0,
       version: 1,
     });
-    touches = retainDemoUser(world, userId, 1_000 + index, {
+    const admitted = retainDemoUser(world, userId, 1_000 + index, {
       cap: 3,
       ttlMs: 10_000,
       touches,
     });
+    expect(admitted).not.toBeNull();
+    touches = admitted ?? [];
   }
-  expect(world.pets.size).toBe(3);
-  expect(world.pets.has(ids[0] ?? "")).toBe(false);
-  expect(world.pets.has(ids[1] ?? "")).toBe(false);
-  expect(world.pets.has(ids[4] ?? "")).toBe(true);
+  const refused = retainDemoUser(world, "00000000-0000-4000-8000-000000000009", 1_004, {
+    cap: 3,
+    ttlMs: 10_000,
+    touches,
+  });
+  expect(refused).toBeNull();
+  expect([...world.pets.keys()].sort()).toEqual(ids);
+});
+
+it("sets Secure only for https or production", async () => {
+  await withEnv({ DEMO_MODE: "true" }, async () => {
+    const plain = await postDemoSession(
+      new Request("http://192.168.1.20/api/demo/session", { method: "POST" }),
+    );
+    expect(plain.headers.get("set-cookie")).not.toMatch(/Secure/);
+    const https = await postDemoSession(
+      new Request("https://demo.example/api/demo/session", { method: "POST" }),
+    );
+    expect(https.headers.get("set-cookie")).toMatch(/Secure/);
+  });
+  const env = process.env as Record<string, string | undefined>;
+  const previous = env.NODE_ENV;
+  env.NODE_ENV = "production";
+  try {
+    await withEnv({ DEMO_MODE: "true" }, async () => {
+      const production = await postDemoSession(
+        new Request("http://192.168.1.20/api/demo/session", { method: "POST" }),
+      );
+      expect(production.headers.get("set-cookie")).toMatch(/Secure/);
+    });
+  } finally {
+    env.NODE_ENV = previous;
+  }
+});
+
+function resetDemoProcess(): void {
+  const world = demoWorldForSession();
+  world.pets.clear();
+  world.tasks.splice(0, world.tasks.length);
+  world.events.splice(0, world.events.length);
+  (globalThis as { __hauntedDemoTouches?: DemoTouch[] }).__hauntedDemoTouches = [];
+}
+
+it("refuses a new session once active demo users fill the cap", async () => {
+  await withEnv({ DEMO_MODE: "true" }, async () => {
+    resetDemoProcess();
+    const first = await postDemoSession(
+      new Request("http://localhost/api/demo/session", { method: "POST" }),
+    );
+    expect(first.status).toBe(200);
+    const firstCookie = first.headers.get("set-cookie")?.split(";")[0] ?? "";
+    for (let index = 1; index < DEMO_USER_CAP; index += 1) {
+      const admitted = await postDemoSession(
+        new Request("http://localhost/api/demo/session", { method: "POST" }),
+      );
+      expect(admitted.status).toBe(200);
+    }
+    const refused = await postDemoSession(
+      new Request("http://localhost/api/demo/session", { method: "POST" }),
+    );
+    expect(refused.status).toBe(429);
+    const refreshed = await postDemoSession(
+      new Request("http://localhost/api/demo/session", {
+        method: "POST",
+        headers: { cookie: firstCookie },
+      }),
+    );
+    expect(refreshed.status).toBe(200);
+    expect(demoWorldForSession().pets.size).toBe(0);
+  });
+});
+
+it("stops a demo user at the task cap", async () => {
+  await withEnv({ DEMO_MODE: "true" }, async () => {
+    resetDemoProcess();
+    const session = await postDemoSession(
+      new Request("http://localhost/api/demo/session", { method: "POST" }),
+    );
+    const cookie = session.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const deps = productionDeps();
+    const headers = { cookie };
+    for (let index = 0; index < DEMO_TASK_CAP; index += 1) {
+      const created = await postTask(
+        request("POST", "/api/tasks", { title: `Task ${index}` }, headers),
+        deps,
+      );
+      expect(created.status).toBe(201);
+    }
+    const overflow = await postTask(
+      request("POST", "/api/tasks", { title: "One too many" }, headers),
+      deps,
+    );
+    expect(overflow.status).toBe(409);
+    expect(demoWorldForSession().tasks.filter((task) => task.deletedAt === null)).toHaveLength(
+      DEMO_TASK_CAP,
+    );
+  });
 });
