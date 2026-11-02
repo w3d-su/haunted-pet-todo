@@ -1,10 +1,11 @@
 import { expect, it } from "vitest";
 import { POST as postDemoSession } from "@/app/api/demo/session/route";
-import { postTask } from "@/app/api/tasks/handlers";
+import { deleteTask, patchTask, postTask } from "@/app/api/tasks/handlers";
 import { getPet } from "@/app/api/pet/handlers";
 import { initialPetState } from "@/lib/game/pet";
 import {
   DEMO_COOKIE,
+  DEMO_STORED_TASK_CAP,
   DEMO_TASK_CAP,
   DEMO_USER_CAP,
   demoWorldForSession,
@@ -261,8 +262,6 @@ it("ignores the published demo cookie placeholder and done tasks", async () => {
   });
 
   const world = createMemoryWorld();
-  const done = initialPetState(USER_ID, 1_000, crypto.randomUUID(), "UTC");
-  void done;
   for (let index = 0; index < 5; index += 1) {
     world.tasks.push({
       id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
@@ -285,4 +284,53 @@ it("ignores the published demo cookie placeholder and done tasks", async () => {
   expect(() =>
     guardDemoTask(world, { id: "00000000-0000-4000-8000-000000000099", userId: USER_ID }, 2),
   ).not.toThrow();
+});
+
+it("keeps create-and-complete and create-and-delete from growing stored tasks", async () => {
+  await withEnv({ DEMO_MODE: "true" }, async () => {
+    resetDemoProcess();
+    const session = await postDemoSession(
+      new Request("http://localhost/api/demo/session", { method: "POST" }),
+    );
+    const cookie = session.headers.get("set-cookie")?.split(";")[0] ?? "";
+    const deps = productionDeps();
+    const headers = { cookie };
+    const rounds = DEMO_STORED_TASK_CAP + 20;
+
+    for (let index = 0; index < rounds; index += 1) {
+      const created = await postTask(
+        request("POST", "/api/tasks", { title: `Done ${index}` }, headers),
+        deps,
+      );
+      expect(created.status).toBe(201);
+      const id = ((await created.json()) as { task: { id: string } }).task.id;
+      const completed = await patchTask(
+        request("PATCH", "/api/tasks", { id, status: "done" }, headers),
+        deps,
+      );
+      expect(completed.status).toBe(200);
+    }
+    const stored = demoWorldForSession().tasks.filter((task) => task.deletedAt === null);
+    expect(stored.length).toBeLessThanOrEqual(DEMO_STORED_TASK_CAP);
+    expect(stored.length).toBeGreaterThan(0);
+
+    for (let index = 0; index < rounds; index += 1) {
+      const created = await postTask(
+        request("POST", "/api/tasks", { title: `Gone ${index}` }, headers),
+        deps,
+      );
+      expect(created.status).toBe(201);
+      const id = ((await created.json()) as { task: { id: string } }).task.id;
+      const removed = await deleteTask(
+        request("DELETE", "/api/tasks", { id }, headers),
+        deps,
+      );
+      expect(removed.status).toBe(200);
+    }
+    const userId = stored[0]?.userId;
+    const left = demoWorldForSession().tasks.filter((task) => task.userId === userId);
+    const gone = left.filter((task) => task.title.startsWith("Gone"));
+    expect(gone).toHaveLength(0);
+    expect(left.length).toBeLessThanOrEqual(DEMO_STORED_TASK_CAP);
+  });
 });

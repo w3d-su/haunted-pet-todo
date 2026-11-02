@@ -11,6 +11,8 @@ export const DEMO_COOKIE = "haunted_demo";
 export const DEMO_USER_CAP = 32;
 /** Live tasks one demo user can store. Updates of an existing task still fit. */
 export const DEMO_TASK_CAP = 100;
+/** Every row kept for one demo user, including done tasks. Deleted rows are dropped. */
+export const DEMO_STORED_TASK_CAP = 300;
 const DEMO_TTL_MS = 30 * 60 * 1000;
 
 const USER_ID =
@@ -116,6 +118,26 @@ export function retainDemoUser(
   return next;
 }
 
+/** Drop deleted rows and the oldest done tasks until the user is within the stored cap. */
+export function trimDemoTasks(world: MemoryWorld, userId: string, cap = DEMO_STORED_TASK_CAP): void {
+  for (let index = world.tasks.length - 1; index >= 0; index -= 1) {
+    const task = world.tasks[index];
+    if (task?.userId === userId && task.deletedAt !== null) world.tasks.splice(index, 1);
+  }
+  while (world.tasks.filter((task) => task.userId === userId).length > cap) {
+    const oldest = world.tasks
+      .filter((task) => task.userId === userId && task.status === "done")
+      .sort(
+        (left, right) =>
+          (left.completedAt ?? 0) - (right.completedAt ?? 0) || left.id.localeCompare(right.id),
+      )[0];
+    if (!oldest) break;
+    const index = world.tasks.findIndex((task) => task.id === oldest.id);
+    if (index < 0) break;
+    world.tasks.splice(index, 1);
+  }
+}
+
 export function guardDemoTask(world: MemoryWorld, task: Pick<Task, "id" | "userId">, cap = DEMO_TASK_CAP): void {
   const live = world.tasks.filter(
     (item) =>
@@ -160,8 +182,20 @@ export async function authorizeDemo(request: Request): Promise<AuthedStores | nu
       ...stores.tasks,
       async upsertTask(task) {
         guardDemoTask(world, task);
-        return stores.tasks.upsertTask(task);
+        const saved = await stores.tasks.upsertTask(task);
+        trimDemoTasks(world, task.userId);
+        return saved;
       },
+      async softDeleteTask(taskId, id, now) {
+        const saved = await stores.tasks.softDeleteTask(taskId, id, now);
+        trimDemoTasks(world, id);
+        return saved;
+      },
+    },
+    commitCompletion: async (input) => {
+      const result = await stores.commitCompletion(input);
+      trimDemoTasks(world, input.task.userId);
+      return result;
     },
   };
 }
