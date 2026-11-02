@@ -8,6 +8,9 @@ import { SystemClock } from "@/lib/server/clock";
 import type { AuthedStores } from "@/lib/server/stores";
 import { syncWorld } from "@/lib/server/sync";
 
+/** A few pets at a time, so a couple of thousand fit inside the 60s Hobby limit. */
+const CRON_CONCURRENCY = 4;
+
 export interface CronDeps {
   now(): number;
   newId(): string;
@@ -30,19 +33,30 @@ export async function runDecayCron(request: Request, deps: CronDeps): Promise<Re
     let processed = 0;
     let deaths = 0;
     let failures = 0;
-    for (const userId of userIds) {
-      try {
-        const stores = await deps.storesFor(userId);
-        const before = await stores.pets.get(userId);
-        if (!before) continue;
-        const world = await syncWorld(stores, deps.now(), null, deps.newId);
-        processed += 1;
-        if (before.state.status === "alive" && world.pet.status === "dead") deaths += 1;
-      } catch (error) {
-        console.error(error);
-        failures += 1;
-      }
-    }
+    let cursor = 0;
+    const workers = Array.from(
+      { length: Math.min(CRON_CONCURRENCY, userIds.length) },
+      async () => {
+        for (;;) {
+          const index = cursor;
+          cursor += 1;
+          const userId = userIds[index];
+          if (!userId) return;
+          try {
+            const stores = await deps.storesFor(userId);
+            const before = await stores.pets.get(userId);
+            if (!before) continue;
+            const world = await syncWorld(stores, deps.now(), null, deps.newId);
+            processed += 1;
+            if (before.state.status === "alive" && world.pet.status === "dead") deaths += 1;
+          } catch (error) {
+            console.error(error);
+            failures += 1;
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
     return json({ processed, deaths, failures });
   } catch (error) {
     return storageFailure(error);

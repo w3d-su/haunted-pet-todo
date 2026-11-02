@@ -198,7 +198,8 @@ const PET_PAGE = 1000;
 /** Every pet row, one page at a time. PostgREST stops a bare select at 1000. */
 export async function listPetUserIds(supabase: SupabaseClient): Promise<string[]> {
   const ids: string[] = [];
-  for (let from = 0; ; from += PET_PAGE) {
+  let from = 0;
+  for (;;) {
     const { data, error } = await supabase
       .from("pet_state")
       .select("user_id")
@@ -209,8 +210,9 @@ export async function listPetUserIds(supabase: SupabaseClient): Promise<string[]
       .array(z.object({ user_id: z.uuid() }))
       .parse(data ?? [])
       .map((row) => row.user_id);
+    if (page.length === 0) return ids;
     ids.push(...page);
-    if (page.length < PET_PAGE) return ids;
+    from += page.length;
   }
 }
 
