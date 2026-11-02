@@ -151,6 +151,53 @@ it("twenty concurrent completions of one task yield one 200, nineteen 409s, and 
   expect(hp).toBeLessThanOrEqual(50);
 });
 
+it("the pet dies during the retry", async () => {
+  const world = createMemoryWorld();
+  const base = world.deps(USER_ID, NOW);
+  const created = await postTask(request("POST", "/api/tasks", { title: "Too late" }), base);
+  const { task } = (await created.json()) as { task: { id: string } };
+  const dyingAt = NOW - 3 * 3_600_000;
+  let attempts = 0;
+  const deps: AppDeps = {
+    ...base,
+    authorize: async (incoming) => {
+      const stores = await base.authorize(incoming);
+      if (!stores) return null;
+      return {
+        ...stores,
+        commitCompletion: async (input) => {
+          attempts += 1;
+          if (attempts === 1) {
+            const current = world.pets.get(USER_ID);
+            world.pets.set(USER_ID, {
+              state: {
+                ...(current?.state ?? input.pet),
+                stage: "hatchling",
+                status: "alive",
+                hp: 1,
+                lastTickAt: dyingAt,
+              },
+              clockOffsetMs: current?.clockOffsetMs ?? 0,
+              version: (current?.version ?? 1) + 1,
+            });
+            return { status: "retry" };
+          }
+          return stores.commitCompletion(input);
+        },
+      };
+    },
+  };
+  const response = await patchTask(
+    request("PATCH", "/api/tasks", { id: task.id, status: "done" }),
+    deps,
+  );
+  expect(response.status).toBe(200);
+  expect(attempts).toBe(2);
+  expect(world.pets.get(USER_ID)?.state.status).toBe("dead");
+  expect(world.events.filter((event) => event.eventType === "PET_DIED")).toHaveLength(1);
+  expect(world.events.filter((event) => event.eventType === "TASK_COMPLETED")).toHaveLength(1);
+});
+
 it("returns 503 with Retry-After when pet version retries are exhausted", async () => {
   const world = createMemoryWorld();
   const base = world.deps(USER_ID, NOW);

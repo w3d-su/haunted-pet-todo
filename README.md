@@ -60,12 +60,7 @@ Authenticated database roles can select their own rows and cannot write. The API
 
 ## Database concurrency tests
 
-`tests/db/postgres-concurrency.test.ts` drops schemas `public` and `auth` and reapplies the migrations. It runs only when **both** are true:
-
-1. `HAUNTED_TEST_DATABASE_URL` is set, and
-2. the database name in that URL contains `test` (case-insensitive).
-
-If the URL is set but the name does not contain `test`, the file throws before any drop. If the URL is unset, the suite skips. CI's `postgres` job uses `postgres:17` and `haunted_test`, creates the `anon`, `authenticated`, and `service_role` roles from `tests/db/bootstrap.sql`, applies the migrations, then runs `tests/db`.
+`tests/db/postgres-concurrency.test.ts` drops schemas `public` and `auth` and reapplies the migrations. It runs only when `HAUNTED_TEST_DATABASE_URL` is set. If the URL path names a database and that name does not contain `test`, the file throws before connecting. A missing path is not taken from the hostname. After connecting, the suite runs `select current_database()` and throws before any drop unless that name contains `test`. If the URL is unset, the suite skips. CI's `postgres` job uses `postgres:17` and `haunted_test`, creates the `anon`, `authenticated`, and `service_role` roles from `tests/db/bootstrap.sql`, applies the migrations, then runs `tests/db`.
 
 ```sh
 HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' pnpm exec vitest run tests/db

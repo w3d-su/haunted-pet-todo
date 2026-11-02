@@ -1,14 +1,12 @@
 /**
  * Real-Postgres concurrency tests for task completion.
  *
- * The suite runs only when both of these are true:
- * 1. `HAUNTED_TEST_DATABASE_URL` is set, and
- * 2. the database name in that URL contains `test` (case-insensitive).
- *
- * It drops schemas `public` and `auth`, then reapplies the migrations.
- * If the URL is set but the name does not contain `test`, loading this file
- * throws and nothing is dropped. If the URL is unset, the suite skips so
- * `pnpm test` stays green without a database.
+ * The suite runs only when `HAUNTED_TEST_DATABASE_URL` is set. If that URL's
+ * path names a database and the name does not contain `test`, loading this
+ * file throws before connecting. A path with no database name is not filled
+ * in from the hostname. After connecting, and before any DROP, the suite
+ * requires `select current_database()` to return a name containing `test`.
+ * If the URL is unset, the suite skips so `pnpm test` stays green.
  */
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
@@ -27,19 +25,18 @@ export function databaseName(connectionString: string): string {
   const normalized = connectionString.replace(/^postgres(ql)?:\/\//i, "http://");
   try {
     const url = new URL(normalized);
-    const fromPath = decodeURIComponent(url.pathname.replace(/^\//, "").split("/")[0] ?? "");
-    // `postgresql:///dbname?host=/socket` puts the name in the host, not the path.
-    return fromPath || decodeURIComponent(url.hostname);
+    return decodeURIComponent(url.pathname.replace(/^\//, "").split("/")[0] ?? "");
   } catch {
     return "";
   }
 }
 
+/** Rejects a URL whose path names a non-test database. An empty path is checked after connect. */
 export function assertSafeTestDatabase(connectionString: string): void {
   const name = databaseName(connectionString);
-  if (!name.toLowerCase().includes("test")) {
+  if (name && !name.toLowerCase().includes("test")) {
     throw new Error(
-      `Refusing to drop schemas: database "${name || "(unknown)"}" does not contain "test". HAUNTED_TEST_DATABASE_URL must name a database whose name contains "test".`,
+      `Refusing to drop schemas: database "${name}" does not contain "test". HAUNTED_TEST_DATABASE_URL must name a database whose name contains "test".`,
     );
   }
 }
@@ -53,14 +50,13 @@ describe("postgres test guard", () => {
     expect(() => assertSafeTestDatabase("postgresql://localhost/haunted")).toThrow(/test/);
   });
 
-  it("accepts a database whose name contains test", () => {
-    expect(() =>
-      assertSafeTestDatabase("postgresql:///haunted_test?host=/var/run/postgresql"),
-    ).not.toThrow();
+  it("does not treat the hostname as the database name", () => {
+    expect(databaseName("postgresql:///haunted_test?host=/var/run/postgresql")).toBe("");
+    expect(databaseName("postgres://test-host.example/postgres")).toBe("postgres");
+    expect(() => assertSafeTestDatabase("postgres://test-host.example/postgres")).toThrow(/test/);
     expect(() =>
       assertSafeTestDatabase("postgres://postgres:postgres@localhost:5432/haunted_test"),
     ).not.toThrow();
-    expect(databaseName("postgresql:///Haunted_Test?host=/var/run/postgresql")).toBe("haunted_test");
   });
 });
 
@@ -99,6 +95,13 @@ describeDb("postgres concurrency", () => {
 
   beforeAll(async () => {
     assertSafeTestDatabase(databaseUrl!);
+    const current = await pool.query<{ name: string }>("select current_database() as name");
+    const connected = String(current.rows[0]?.name ?? "");
+    if (!connected.toLowerCase().includes("test")) {
+      throw new Error(
+        `Refusing to drop schemas: current_database() is "${connected || "(unknown)"}", which does not contain "test".`,
+      );
+    }
     await pool.query("drop schema if exists public cascade");
     await pool.query("drop schema if exists auth cascade");
     await pool.query("create schema public");

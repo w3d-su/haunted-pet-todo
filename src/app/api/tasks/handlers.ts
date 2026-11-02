@@ -237,9 +237,11 @@ async function completeTask(
       const fresh = await stores.pets.get(stores.userId);
       if (!fresh) return retryLater();
       now = effectiveNow(deps.now(), fresh.clockOffsetMs);
-      pet = catchUp(fresh.state, tasks, now).state;
+      pet = fresh.state;
       version = fresh.version;
     }
+    const caught = catchUp(pet, tasks, now);
+    pet = caught.state;
     const known = tasks.find((item) => item.id === task.id);
     if (attempt === 0 && (!known || known.status === "done")) {
       return conflict("Task is already done");
@@ -247,15 +249,22 @@ async function completeTask(
 
     const event = makeTaskCompletedEvent({ ...task, status: known?.status ?? task.status }, now);
     const reduction = applyPetEvent(pet, event, now);
+    const seen = new Set(caught.emitted.map((item) => JSON.stringify(item)));
     const events = [
+      ...caught.emitted.map((emitted) => ({
+        eventType: emitted.type,
+        payload: { ...emitted, at: now },
+      })),
       { eventType: "TASK_COMPLETED", payload: { ...event, at: now } },
       ...(event.wasOverdue
         ? [{ eventType: "ZOMBIE_SLAIN", payload: { taskId: task.id, at: now } }]
         : []),
-      ...reduction.emitted.map((emitted) => ({
-        eventType: emitted.type,
-        payload: { ...emitted, at: now },
-      })),
+      ...reduction.emitted
+        .filter((emitted) => !seen.has(JSON.stringify(emitted)))
+        .map((emitted) => ({
+          eventType: emitted.type,
+          payload: { ...emitted, at: now },
+        })),
     ];
     const result = await stores.commitCompletion({
       task: { ...task, status: known?.status ?? task.status, completedAt: now },
