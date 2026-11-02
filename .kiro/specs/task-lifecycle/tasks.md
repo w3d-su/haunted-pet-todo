@@ -79,34 +79,34 @@
 
 ## Week 2 (Nov 9–16): Unstyled Task UI, Zombie UI
 
-- [ ] 10. (Week 2) Implement `TaskList.tsx`, `TaskItem.tsx`, `TaskForm.tsx`
-  - [ ] 10.1 `TaskForm.tsx`: controlled form with title, category select, size select, optional due date; client-side Zod validation
-  - [ ] 10.2 `TaskItem.tsx`: show task title, status badge, complete button; strike-through + slime flash on completion
-  - [ ] 10.3 `TaskList.tsx`: fetch from `/api/tasks`, optimistic update on complete
-  - [ ] 10.4 `TaskList.tsx`: drag-to-reorder that calls PATCH `sortOrder`
+- [x] 10. (Week 2) Implement `TaskList.tsx`, `TaskItem.tsx`, `TaskForm.tsx`
+  - [x] 10.1 `TaskForm.tsx`: controlled form with title, category select, size select, optional due date; client-side Zod validation. An "Already late" checkbox sets the due time one hour before the server clock, because the pixel font makes the native datetime control hard to fill.
+  - [x] 10.2 `TaskItem.tsx`: show task title, status badge, complete button; strike-through + slime flash on completion
+  - [x] 10.3 `TaskList.tsx`: fetch from `/api/tasks`, optimistic update on complete
+  - [x] 10.4 `TaskList.tsx`: drag-to-reorder that calls PATCH `sortOrder`
     - Files: `src/components/tasks/TaskList.tsx`, `src/components/tasks/TaskItem.tsx`, `src/components/tasks/TaskForm.tsx`
   _Requirements: 1.1, 2.1, 7.1, 14.1, 14.2_
 
-- [ ] 11. (Week 2) Implement zombie UI components
-  - [ ] 11.1 `ZombieSprite.tsx`: render `zombie_walk_N.png` frames with stepped CSS animation
-  - [ ] 11.2 `ZombieLayer.tsx`: fixed full-viewport overlay; one `ZombieSprite` per active zombie keyed by `taskId`
-  - [ ] 11.3 Wire `ZombieLayer` to `GameStateProvider` so zombies appear/dissolve reactively
-  - [ ] 11.4 Respect `prefers-reduced-motion` — static sprite, no walk animation
+- [x] 11. (Week 2) Implement zombie UI components
+  - [x] 11.1 `ZombieSprite.tsx`: render `zombie_walk_N.png` frames with stepped CSS animation
+  - [x] 11.2 `ZombieLayer.tsx`: fixed full-viewport overlay; one `ZombieSprite` per active zombie keyed by `taskId`
+  - [x] 11.3 Wire `ZombieLayer` to `GameStateProvider` so zombies appear/dissolve reactively
+  - [x] 11.4 Respect `prefers-reduced-motion` — static sprite, no walk animation
     - Files: `src/components/zombies/ZombieSprite.tsx`, `src/components/zombies/ZombieLayer.tsx`
   _Requirements: 5.3_
 
-- [ ] 12. (Week 2) Extend `src/app/api/cron/decay/route.ts` — overdue-task check
+- [x] 12. (Week 2) Extend `src/app/api/cron/decay/route.ts` — overdue-task check
   - _Depends on decay-and-time-travel task 6, which owns the cron route file._
-  - [ ] 12.1 Load all users' tasks, identify newly overdue ones (`isOverdue` with current time)
-  - [ ] 12.2 Set `status = "overdue"` on newly overdue tasks, append `TASK_OVERDUE` events
-  - [ ] 12.3 Count active zombies per user, apply `ZOMBIE_DRAIN` event to each pet via `applyPetEvent`
+  - [x] 12.1 Load all users' tasks, identify newly overdue ones (`isOverdue` with current time)
+  - [x] 12.2 Set `status = "overdue"` on newly overdue tasks, append `TASK_OVERDUE` events
+  - [x] 12.3 Count active zombies per user and apply their drain inside the shared catch-up (`catchUp`), which is what `applyPetEvent` uses for a tick
     - Files: `src/app/api/cron/decay/route.ts`
   _Requirements: 5.1, 5.2, 5.4, 6.1, 6.2, 6.3_
 
-- [ ] 13. (Week 2) Integration tests for DB task helpers
-  - [ ] 13.1 Test `getTasks` excludes soft-deleted tasks
-  - [ ] 13.2 Test `upsertTask` maps TypeScript camelCase to snake_case columns
-  - [ ] 13.3 Test `appendEvent` inserts correct event_type and user_id
+- [x] 13. (Week 2) Integration tests for DB task helpers
+  - [x] 13.1 Test `getTasks` excludes soft-deleted tasks
+  - [x] 13.2 Test `upsertTask` maps TypeScript camelCase to snake_case columns
+  - [x] 13.3 Test `appendEvent` inserts correct event_type and user_id
     - Files: `tests/db/tasks.test.ts`
   _Requirements: 12.1, 12.2, 13.1_
 

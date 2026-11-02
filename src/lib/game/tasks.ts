@@ -90,6 +90,25 @@ export function makeTaskCompletedEvent(
  * Persist the overdue transition for todos whose due time has passed.
  * Already-overdue rows are left alone so a second pass cannot spawn another zombie.
  */
+/**
+ * Pull event timestamps that are still ahead of `now` back to `now`.
+ * `dueAt` stays: it is a deadline the user chose, not a clock cursor.
+ */
+export function clampFutureTaskTimes(task: Task, now: number): Task {
+  const createdAt = task.createdAt > now ? now : task.createdAt;
+  const completedAt =
+    task.completedAt !== null && task.completedAt > now ? now : task.completedAt;
+  const deletedAt = task.deletedAt !== null && task.deletedAt > now ? now : task.deletedAt;
+  if (
+    createdAt === task.createdAt &&
+    completedAt === task.completedAt &&
+    deletedAt === task.deletedAt
+  ) {
+    return task;
+  }
+  return { ...task, createdAt, completedAt, deletedAt };
+}
+
 export function markNewlyOverdue(
   tasks: readonly Task[],
   now: number,

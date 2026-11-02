@@ -3,14 +3,16 @@ import { expect, it } from "vitest";
 import { OffsetClock } from "@/lib/game/clock";
 import { MAX_HP, ZOMBIE_DRAIN_PER_HOUR } from "@/lib/game/constants";
 import { decayStats } from "@/lib/game/decay";
-import { resolveEvolvedForm } from "@/lib/game/evolution";
+import { calendarDay, resolveEvolvedForm } from "@/lib/game/evolution";
 import { petRecordFromRow, petStateToRow } from "@/lib/db/pet";
 import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 import {
   applyPetEvent,
   catchUp,
+  clampFuturePetTimes,
   clampStats,
   rebirthPet,
+  runOneTick,
   type PetState,
   type PetStage,
   type PetStatus,
@@ -529,6 +531,92 @@ it("P19b split catch-up through row serialization matches one catch-up", () => {
         expect(Math.abs(current.hp - whole.hp)).toBeLessThan(1e-6);
         expect(Math.abs(current.hunger - whole.hunger)).toBeLessThan(1e-6);
         expect(Math.abs(current.mood - whole.mood)).toBeLessThan(1e-6);
+      },
+    ),
+  );
+});
+
+it("P20 N hourly ticks match one N-hour tick", () => {
+  check(
+    fc.property(
+      arbAlivePetState,
+      fc.array(arbTask, { maxLength: 3 }),
+      fc.constantFrom(1, 6, 24),
+      (state, tasks, hours) => {
+        const start = state.lastTickAt ?? MIN;
+        const owned = tasks.map((task) => ({
+          ...task,
+          userId: state.userId,
+          dueAt: task.status === "overdue" ? Math.min(task.dueAt ?? start, start) : task.dueAt,
+        }));
+        let stepped: PetState = state;
+        for (let hour = 1; hour <= hours; hour += 1) {
+          stepped = runOneTick(stepped, owned, start + hour * HOUR);
+        }
+        const once = runOneTick(state, owned, start + hours * HOUR);
+        expect(stepped.status).toBe(once.status);
+        expect(stepped.stage).toBe(once.stage);
+        expect(stepped.currentStreak).toBe(once.currentStreak);
+        expect(Math.abs(stepped.hp - once.hp)).toBeLessThanOrEqual(1);
+        expect(Math.abs(stepped.hunger - once.hunger)).toBeLessThanOrEqual(1);
+        expect(Math.abs(stepped.mood - once.mood)).toBeLessThanOrEqual(1);
+        if (state.stage === "egg") {
+          expect(stepped.hp).toBe(state.hp);
+          expect(once.hp).toBe(state.hp);
+        }
+
+        const end = start + hours * HOUR;
+        // A todo that comes due inside the window becomes a zombie. decayStats
+        // does not include that drain, so only tasks that stay quiet are compared.
+        const quiet = owned.map((task) => {
+          const haunts =
+            task.deletedAt === null &&
+            task.status !== "done" &&
+            task.dueAt !== null &&
+            task.dueAt <= end;
+          return haunts ? { ...task, status: "done" as const } : task;
+        });
+        const quietTick = runOneTick(state, quiet, end);
+        const decayed = decayStats(state, start + hours * HOUR);
+        if (quietTick.status === "alive") {
+          expect(Math.abs(quietTick.hp - decayed.hp)).toBeLessThanOrEqual(1);
+          expect(Math.abs(quietTick.hunger - decayed.hunger)).toBeLessThanOrEqual(1);
+          expect(Math.abs(quietTick.mood - decayed.mood)).toBeLessThanOrEqual(1);
+        }
+      },
+    ),
+  );
+});
+
+it("reset pulls lastCompletionDay back with the completion instant", () => {
+  check(
+    fc.property(
+      arbAlivePetState,
+      fc.integer({ min: HOUR, max: 10 * 24 * HOUR }),
+      (state, ahead) => {
+        const now = state.lastTickAt ?? MIN;
+        const shifted = {
+          ...state,
+          status: "alive" as const,
+          lastCompletionAt: now + ahead,
+          lastCompletionDay: "2099-12-31",
+          currentStreak: 4,
+        };
+        const clamped = clampFuturePetTimes(shifted, now);
+        expect(clamped.lastCompletionAt).toBe(now);
+        expect(clamped.lastCompletionDay).toBe(calendarDay(now, state.timeZone));
+        const done = applyPetEvent(
+          clamped,
+          {
+            type: "TASK_COMPLETED",
+            taskId: "fresh-task-after-reset",
+            wasOverdue: false,
+            category: "chores",
+            completedAt: now,
+          },
+          now,
+        );
+        expect(done.state.currentStreak).toBe(clamped.currentStreak);
       },
     ),
   );

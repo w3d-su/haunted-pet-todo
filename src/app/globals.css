@@ -49,8 +49,32 @@ body {
   );
 }
 
+.tombstone-shade {
+  background: color-mix(in srgb, var(--color-bg-void) 90%, transparent);
+}
+
+@keyframes zombie-march {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(calc(-100vw - 3rem));
+  }
+}
+
+.zombie-march {
+  animation-name: zombie-march;
+  animation-duration: 24s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .crt-scanlines {
     display: none;
+  }
+
+  .zombie-march {
+    animation: none;
   }
 }

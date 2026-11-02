@@ -105,7 +105,7 @@ _User Story_: As a developer, I want a Vercel Cron job to fire every hour so tha
 - 6.2: IF the authorization header is missing or incorrect, THEN the system SHALL return HTTP 401 and exit without modifying any state.
 - 6.3: WHEN the cron handler processes a user, THEN the system SHALL: (a) fetch `PetState`, (b) apply `DECAY_TICK`, (c) compute new zombie drain, (d) apply `ZOMBIE_DRAIN`, (e) check for newly overdue tasks, (f) save updated `PetState`, (g) append events.
 - 6.4: WHEN the cron handler finishes, THEN the system SHALL return HTTP 200 with a summary JSON payload.
-- 6.5: WHEN `vercel.json` is read, THEN the system SHALL schedule `/api/cron/decay` once per day (`"0 8 * * * *"`). Vercel Hobby rejects cron expressions that run more than once a day, and Hobby timing is only guaranteed within the hour. The cron is a backstop. Play sessions catch up from `lastTickAt`.
+- 6.5: WHEN `vercel.json` is read, THEN the system SHALL schedule `/api/cron/decay` once per day (`0 8 * * *`, 08:00 UTC, which is 16:00 in Taipei). Vercel Hobby rejects cron expressions that run more than once a day, and Hobby timing is only guaranteed within the hour. The cron is a backstop. Play sessions catch up from `lastTickAt`.
 
 ---
 

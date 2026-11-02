@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["**/*.test.ts", "**/*.property.ts"],
+    // tests/db drops schemas. Files must not do that at the same time.
+    fileParallelism: false,
   },
   resolve: {
     alias: {

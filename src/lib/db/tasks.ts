@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import {
+  clampFutureTaskTimes,
   TASK_CATEGORIES,
   TASK_SIZES,
   TASK_STATUSES,
@@ -126,6 +127,37 @@ export async function markOverdue(
   throwOnError(error);
   if (!data) return null;
   return taskFromRow(data);
+}
+
+/**
+ * Pull future clock cursors on tasks that are still open.
+ * A done row is left alone so a completion that landed during the reset
+ * cannot be overwritten by the task we read a moment earlier.
+ */
+export async function clampStoredTaskTimes(
+  supabase: SupabaseClient,
+  userId: string,
+  now: number,
+): Promise<void> {
+  const listed = await supabase.from("tasks").select("*").eq("user_id", userId);
+  throwOnError(listed.error);
+  const tasks = z.array(z.unknown()).parse(listed.data ?? []).map((row) => taskFromRow(row));
+  for (const task of tasks) {
+    if (task.status === "done") continue;
+    const next = clampFutureTaskTimes(task, now);
+    if (next === task) continue;
+    const written = await supabase
+      .from("tasks")
+      .update({
+        created_at: toTimestamptz(next.createdAt),
+        completed_at: toTimestamptz(next.completedAt),
+        deleted_at: toTimestamptz(next.deletedAt),
+      })
+      .eq("id", task.id)
+      .eq("user_id", userId)
+      .neq("status", "done");
+    throwOnError(written.error);
+  }
 }
 
 /** Field update that cannot overwrite a done task. */

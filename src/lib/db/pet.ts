@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { clampStoredTaskTimes } from "@/lib/db/tasks";
 import {
+  clampFuturePetTimes,
   PET_STAGES,
   PET_STATUSES,
   type PetState,
@@ -184,6 +186,63 @@ export async function savePetState(
     .eq("id", state.id)
     .eq("user_id", state.userId)
     .eq("version", expectedVersion)
+    .select("*")
+    .maybeSingle();
+  throwOnError(updated.error);
+  if (!updated.data) return null;
+  return petRecordFromRow(updated.data);
+}
+
+const PET_PAGE = 1000;
+
+/** Every pet row, one page at a time. PostgREST stops a bare select at 1000. */
+export async function listPetUserIds(supabase: SupabaseClient): Promise<string[]> {
+  const ids: string[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("pet_state")
+      .select("user_id")
+      .order("user_id", { ascending: true })
+      .range(from, from + PET_PAGE - 1);
+    throwOnError(error);
+    const page = z
+      .array(z.object({ user_id: z.uuid() }))
+      .parse(data ?? [])
+      .map((row) => row.user_id);
+    if (page.length === 0) return ids;
+    ids.push(...page);
+    from += page.length;
+  }
+}
+
+/**
+ * Persist a demo clock offset. Compare-and-swap on `version` so a catch-up
+ * save cannot put the old offset back. `clampTo` pulls future cursors down
+ * to the reset instant; due dates are not rewritten.
+ */
+export async function setClockOffset(
+  supabase: SupabaseClient,
+  userId: string,
+  clockOffsetMs: number,
+  clampTo: number | null,
+): Promise<PetRecord | null> {
+  if (!Number.isSafeInteger(clockOffsetMs) || clockOffsetMs < 0) {
+    throw new Error("clock offset must be a non-negative integer");
+  }
+  const current = await getPetRecord(supabase, userId);
+  if (!current) return null;
+  const state = clampTo === null ? current.state : clampFuturePetTimes(current.state, clampTo);
+  if (clampTo !== null) await clampStoredTaskTimes(supabase, userId, clampTo);
+  const updated = await supabase
+    .from("pet_state")
+    .update({
+      ...petStateToRow(state),
+      clock_offset_ms: clockOffsetMs,
+      version: current.version + 1,
+    })
+    .eq("user_id", userId)
+    .eq("version", current.version)
     .select("*")
     .maybeSingle();
   throwOnError(updated.error);

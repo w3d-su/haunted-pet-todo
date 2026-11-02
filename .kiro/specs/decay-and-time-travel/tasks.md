@@ -55,44 +55,44 @@
 ## Week 2 (Nov 9–16): Cron Job, Fast-Forward API, DemoControls
 
 - [ ] 6. (Week 2) Implement Vercel Cron job handler `src/app/api/cron/decay/route.ts`
-  - [ ] 6.1 Add `Authorization: Bearer <CRON_SECRET>` verification (return 401 on failure)
-  - [ ] 6.2 Fetch all users' `PetState` and `Task` lists via service role client
-  - [ ] 6.3 For each user: call `decayStats(pet, now)`, check newly overdue tasks, count active zombies
-  - [ ] 6.4 Apply `ZOMBIE_DRAIN` event via `applyPetEvent` after decay
-  - [ ] 6.5 Save updated `PetState` and append events to `events` table
-  - [ ] 6.6 If pet newly dead, enqueue epitaph generation (POST to `/api/ai/epitaph`)
-  - [ ] 6.7 Return HTTP 200 with `{ processed: N, deaths: K }` summary
+  - [x] 6.1 Add `Authorization: Bearer <CRON_SECRET>` verification (return 401 on failure). Compare with a constant-time hash, and reject an empty secret.
+  - [x] 6.2 Fetch all users' `PetState` and `Task` lists via service role client
+  - [x] 6.3 For each user: run the same catch-up as a read (`syncWorld` / `catchUp`), which marks newly overdue tasks and applies decay plus zombie drain
+  - [x] 6.4 Zombie drain is part of that catch-up (eggs still take none), not a second copy of the reducer
+  - [x] 6.5 Save updated `PetState` and append events to `events` table
+  - [ ] 6.6 If pet newly dead, enqueue epitaph generation (POST to `/api/ai/epitaph`). Deferred: that route is Week 3. The cron counts deaths and does not call a missing handler.
+  - [x] 6.7 Return HTTP 200 with `{ processed: N, deaths: K }` summary
     - Files: `src/app/api/cron/decay/route.ts`
   _Requirements: 5.1, 5.2, 6.1–6.5_
 
-- [ ] 7. (Week 2) Add cron schedule to `vercel.json`
-  - [ ] 7.1 Add `"crons": [{ "path": "/api/cron/decay", "schedule": "0 8 * * *" }]` (daily; Hobby rejects hourly) only once `src/app/api/cron/decay/route.ts` exists. Do not point `vercel.json` at a missing route.
+- [x] 7. (Week 2) Add cron schedule to `vercel.json`
+  - [x] 7.1 Add `"crons": [{ "path": "/api/cron/decay", "schedule": "0 8 * * *" }]` (daily; Hobby rejects hourly) only once `src/app/api/cron/decay/route.ts` exists. Do not point `vercel.json` at a missing route.
     - Files: `vercel.json`
   _Requirements: 6.5_
 
-- [ ] 8. (Week 2) Implement `src/app/api/demo/fast-forward/route.ts`
-  - [ ] 8.1 Require auth. Return 403 unless server `DEMO_MODE === "true"`. Add `N` hours to `pet_state.clock_offset_ms`; do not push `lastTickAt` past the effective clock.
-  - [ ] 8.2 Parse request body with `FastForwardBodySchema` (Zod); return 400 if invalid
-  - [ ] 8.3 Implement `reset: true` branch: set `clock_offset_ms` to 0 and clamp future `lastTickAt` (and other future game timestamps) to the new effective now
-  - [ ] 8.4 Implement `hours: N` branch: add N hours to `clock_offset_ms`, then run the same catch-up as a read
-  - [ ] 8.5 Ensure each iteration of the loop calls the same code path as the real cron handler (shared helper function, not duplicated logic)
-  - [ ] 8.6 Return updated `PetState` after all ticks
+- [x] 8. (Week 2) Implement `src/app/api/demo/fast-forward/route.ts`
+  - [x] 8.1 Require auth. Return 403 unless server `DEMO_MODE === "true"`. Add `N` hours to `pet_state.clock_offset_ms`; do not push `lastTickAt` past the effective clock.
+  - [x] 8.2 Parse request body with `FastForwardBodySchema` (Zod); return 400 if invalid
+  - [x] 8.3 Implement `reset: true` branch: set `clock_offset_ms` to 0 and clamp future clock cursors (`lastTickAt`, completion times, `createdAt`, `deletedAt`) to the new effective now. Due dates stay; they are deadlines, not cursors.
+  - [x] 8.4 Implement `hours: N` branch: add N hours to `clock_offset_ms`, then run the same catch-up as a read
+  - [x] 8.5 That catch-up is `syncWorld` / `catchUp` / `runOneTick`, the same path as the cron. One catch-up after the offset change, not an HTTP-side loop (requirement 7.2).
+  - [x] 8.6 Return updated `PetState` after all ticks
     - Files: `src/app/api/demo/fast-forward/route.ts`
   _Requirements: 7.1–7.5_
 
-- [ ] 9. (Week 2) Implement `DemoControls.tsx` component
-  - [ ] 9.1 Render only when the server reports `DEMO_MODE === "true"` (not a `NEXT_PUBLIC_` env flag)
-  - [ ] 9.2 Render "+1h", "+6h", "+24h", and "Reset" `PixelButton` components
-  - [ ] 9.3 Each button calls `POST /api/demo/fast-forward` with the correct body and triggers full data refresh on success
-  - [ ] 9.4 Show a loading indicator while the request is in-flight; disable buttons during loading
-  - [ ] 9.5 Respect `prefers-reduced-motion` for any entry animation
+- [x] 9. (Week 2) Implement `DemoControls.tsx` component
+  - [x] 9.1 Render only when the server reports `DEMO_MODE === "true"` (not a `NEXT_PUBLIC_` env flag)
+  - [x] 9.2 Render "+1h", "+6h", "+24h", and "Reset" `PixelButton` components
+  - [x] 9.3 Each button calls `POST /api/demo/fast-forward` with the correct body and triggers full data refresh on success
+  - [x] 9.4 Show a loading indicator while the request is in-flight; disable buttons during loading
+  - [x] 9.5 Respect `prefers-reduced-motion` for any entry animation
     - Files: `src/components/ui/DemoControls.tsx`
   _Requirements: 8.1–8.4_
 
-- [ ] 10. (Week 2) Write property test for Property P20 (fast-forward N hours = N ticks)
-  - [ ] 10.1 Extract shared single-tick logic from cron handler into a testable `runOneTick(pet, tasks, now)` pure helper
-  - [ ] 10.2 Write PBT: for N ∈ {1, 6, 24}, verify that N calls to `runOneTick` equal one N-hour `decayStats` call (within ±1)
-    - Files: `tests/game/invariants.property.ts`, `src/lib/game/decay.ts`
+- [x] 10. (Week 2) Write property test for Property P20 (fast-forward N hours = N ticks)
+  - [x] 10.1 `runOneTick(pet, tasks, now)` in `src/lib/game/pet.ts` returns `catchUp(...).state`. It lives next to catch-up so `decay.ts` does not import the reducer (that import would cycle).
+  - [x] 10.2 Write PBT: for N ∈ {1, 6, 24}, N hourly `runOneTick` calls match one N-hour `runOneTick` within ±1. With no zombie during the window (including a todo that comes due inside it) and the pet still alive, that also matches `decayStats` within ±1. Eggs keep their HP.
+    - Files: `tests/game/invariants.property.ts`, `src/lib/game/pet.ts`
   _Requirements: 7.4, P20_
 
 ## Week 3 (Nov 16–23): Web Push, Habitual-Time Reminders

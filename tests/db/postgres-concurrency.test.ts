@@ -8,38 +8,19 @@
  * requires `select current_database()` to return a name containing `test`.
  * If the URL is unset, the suite skips so `pnpm test` stays green.
  */
-import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { getTasksRoute, patchTask, postTask } from "@/app/api/tasks/handlers";
 import { commitCompletion } from "@/lib/db/completion";
 import { appendEvent } from "@/lib/db/events";
-import { getPetRecord, savePetState } from "@/lib/db/pet";
+import { getPetRecord, savePetState, setClockOffset } from "@/lib/db/pet";
 import { getTasks, markOverdue, softDeleteTask, updateOpen, upsertTask } from "@/lib/db/tasks";
 import { SystemClock } from "@/lib/server/clock";
 import type { AppDeps } from "@/lib/server/stores";
 import { request, USER_ID } from "../helpers/world";
+import { assertSafeTestDatabase, databaseName } from "./guard";
 import { createPgSupabase } from "./pg-supabase";
-
-export function databaseName(connectionString: string): string {
-  const normalized = connectionString.replace(/^postgres(ql)?:\/\//i, "http://");
-  try {
-    const url = new URL(normalized);
-    return decodeURIComponent(url.pathname.replace(/^\//, "").split("/")[0] ?? "");
-  } catch {
-    return "";
-  }
-}
-
-/** Rejects a URL whose path names a non-test database. An empty path is checked after connect. */
-export function assertSafeTestDatabase(connectionString: string): void {
-  const name = databaseName(connectionString);
-  if (name && !name.toLowerCase().includes("test")) {
-    throw new Error(
-      `Refusing to drop schemas: database "${name}" does not contain "test". HAUNTED_TEST_DATABASE_URL must name a database whose name contains "test".`,
-    );
-  }
-}
+import { resetDatabase } from "./prepare";
 
 const databaseUrl = process.env.HAUNTED_TEST_DATABASE_URL;
 if (databaseUrl) assertSafeTestDatabase(databaseUrl);
@@ -66,6 +47,7 @@ function pgDeps(pool: Pool): AppDeps {
   return {
     now: () => clock.now(),
     newId: () => crypto.randomUUID(),
+    demoMode: false,
     authorize: async () => ({
       userId: USER_ID,
       pets: {
@@ -83,6 +65,8 @@ function pgDeps(pool: Pool): AppDeps {
         appendEvent: (id, eventType, payload) => appendEvent(supabase, id, eventType, payload),
       },
       commitCompletion: (input) => commitCompletion(supabase, input),
+      setClockOffset: (id, shift) =>
+        setClockOffset(supabase, id, shift.clockOffsetMs, shift.clampTo),
     }),
   };
 }
@@ -94,23 +78,7 @@ describeDb("postgres concurrency", () => {
   const supabase = createPgSupabase(pool);
 
   beforeAll(async () => {
-    assertSafeTestDatabase(databaseUrl!);
-    const current = await pool.query<{ name: string }>("select current_database() as name");
-    const connected = String(current.rows[0]?.name ?? "");
-    if (!connected.toLowerCase().includes("test")) {
-      throw new Error(
-        `Refusing to drop schemas: current_database() is "${connected || "(unknown)"}", which does not contain "test".`,
-      );
-    }
-    await pool.query("drop schema if exists public cascade");
-    await pool.query("drop schema if exists auth cascade");
-    await pool.query("create schema public");
-    const bootstrap = readFileSync("tests/db/bootstrap.sql", "utf8");
-    const init = readFileSync("supabase/migrations/0001_init.sql", "utf8");
-    const rls = readFileSync("supabase/migrations/0002_rls.sql", "utf8");
-    await pool.query(bootstrap);
-    await pool.query(init);
-    await pool.query(rls);
+    await resetDatabase(pool);
     await pool.query("insert into auth.users (id) values ($1)", [USER_ID]);
   });
 

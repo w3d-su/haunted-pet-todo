@@ -275,6 +275,13 @@ export function applyTaskCompleted(
   return { state: next, emitted };
 }
 
+/** A split of an exact kill can leave a few ulps. That remainder is still death. */
+const HP_DEATH_EPSILON = 1e-9;
+
+export function hpSpent(hp: number): boolean {
+  return hp <= HP_DEATH_EPSILON;
+}
+
 /** When HP hits 0 during [from, to] at a constant hourly rate. Rounded to a millisecond. */
 export function hpReachedZeroAt(
   from: number,
@@ -308,7 +315,7 @@ export function applyDecayTick(
   if (state.currentStreak > 0 && decayed.currentStreak === 0) {
     emitted.push({ type: "STREAK_BROKEN" });
   }
-  if (state.status === "alive" && decayed.hp === 0) {
+  if (state.status === "alive" && hpSpent(decayed.hp)) {
     const from = state.lastTickAt ?? event.toTime;
     const rate = state.stage === "egg" ? 0 : DECAY_RATE_HP;
     const next = markDead(decayed, hpReachedZeroAt(from, event.toTime, state.hp, rate));
@@ -328,7 +335,7 @@ export function applyZombieDrain(
   if (damage === 0) return unchanged(state);
 
   const hp = clampHp(state.hp - damage);
-  if (hp > 0) return { state: { ...state, hp }, emitted: [] };
+  if (!hpSpent(hp)) return { state: { ...state, hp }, emitted: [] };
   const rate = event.zombieCount * ZOMBIE_DRAIN_PER_HOUR;
   const next = markDead(
     { ...state, hp: 0 },
@@ -379,7 +386,7 @@ function applySegment(state: PetState, from: number, to: number, zombies: number
   if (state.status !== "alive" || to <= from) return unchanged(state);
   const hours = (to - from) / HOUR_MS;
   const hpRate = state.stage === "egg" ? 0 : DECAY_RATE_HP + zombies * ZOMBIE_DRAIN_PER_HOUR;
-  const dies = hpRate > 0 && state.hp <= hpRate * hours;
+  const dies = hpRate > 0 && hpSpent(state.hp - hpRate * hours);
   const effectUntil = dies ? hpReachedZeroAt(from, to, state.hp, hpRate) : to;
   const decayed = decayStats({ ...state, lastTickAt: from }, effectUntil);
   const emitted: GameEvent[] = [];
@@ -430,6 +437,60 @@ export function catchUp(pet: PetState, tasks: readonly Task[], now: number): Cat
   }
 
   return { state, tasks: taskList, emitted, overdueTaskIds: marked.overdueTaskIds };
+}
+
+/**
+ * One catch-up to `now`. Cron, fast-forward, and property P20 share this
+ * with ordinary reads (`catchUp`) so an hour-step and a multi-hour step
+ * cannot drift apart.
+ */
+export function runOneTick(pet: PetState, tasks: readonly Task[], now: number): PetState {
+  return catchUp(pet, tasks, now).state;
+}
+
+function notAfter(value: number | null, now: number): number | null {
+  if (value === null || value <= now) return value;
+  return now;
+}
+
+/**
+ * Pull clock cursors back to `now` after a demo reset. A future `lastTickAt`
+ * makes later decay a no-op. Due dates are not cursors and are not touched.
+ */
+export function clampFuturePetTimes(state: PetState, now: number): PetState {
+  const lastTickAt = notAfter(state.lastTickAt, now);
+  const lastCompletionAt = notAfter(state.lastCompletionAt, now);
+  const becameAdultAt = notAfter(state.becameAdultAt, now);
+  const diedAt = notAfter(state.diedAt, now);
+  const recentCompletionTimestamps = state.recentCompletionTimestamps.map((stamp) =>
+    stamp > now ? now : stamp,
+  );
+  const recentUnchanged = recentCompletionTimestamps.every(
+    (stamp, index) => stamp === state.recentCompletionTimestamps[index],
+  );
+  const lastCompletionDay =
+    lastCompletionAt !== null && lastCompletionAt !== state.lastCompletionAt
+      ? calendarDay(lastCompletionAt, state.timeZone)
+      : state.lastCompletionDay;
+  if (
+    lastTickAt === state.lastTickAt &&
+    lastCompletionAt === state.lastCompletionAt &&
+    lastCompletionDay === state.lastCompletionDay &&
+    becameAdultAt === state.becameAdultAt &&
+    diedAt === state.diedAt &&
+    recentUnchanged
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    lastTickAt,
+    lastCompletionAt,
+    lastCompletionDay,
+    becameAdultAt,
+    diedAt,
+    recentCompletionTimestamps,
+  };
 }
 
 /** Display value. Not written back on read; `becameAdultAt` is the source of truth. */

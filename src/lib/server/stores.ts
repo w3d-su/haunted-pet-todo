@@ -57,6 +57,16 @@ export interface EventStore {
   ): Promise<void>;
 }
 
+export interface ClockShift {
+  /** Non-negative offset stored on the pet row. */
+  readonly clockOffsetMs: number;
+  /**
+   * When set, timestamps that are still ahead of this instant are pulled
+   * back to it. Due dates are left alone: they are deadlines, not a clock cursor.
+   */
+  readonly clampTo: number | null;
+}
+
 export interface AuthedStores {
   readonly userId: string;
   readonly pets: PetStore;
@@ -67,11 +77,18 @@ export interface AuthedStores {
    * A version miss rolls everything back (`retry`). Already done is `conflict`.
    */
   commitCompletion(input: CompletionCommit): Promise<CompletionResult>;
+  /**
+   * Write `clock_offset_ms`. A save of pet stats must not change it.
+   * Returns null when the pet row lost a version race.
+   */
+  setClockOffset(userId: string, shift: ClockShift): Promise<PetSnapshot | null>;
 }
 
 /** Route handlers depend on this port. Tests pass an in-memory implementation. */
 export interface AppDeps {
   now(): number;
   newId(): string;
+  /** Server `DEMO_MODE`. Fast-forward refuses to run when this is false. */
+  readonly demoMode: boolean;
   authorize(request: Request): Promise<AuthedStores | null>;
 }

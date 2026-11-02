@@ -116,18 +116,18 @@
     - Files: `src/app/api/pet/route.ts`
   _Requirements: 13.1, 13.3_
 
-- [ ] 13. (Week 2) Implement `PetSprite.tsx` and `PetStats.tsx` components
-  - [ ] 13.1 `PetSprite.tsx`: map `PetStage` → correct sprite filename and alt text
-  - [ ] 13.2 `PetSprite.tsx`: apply `pixel-art` CSS class and correct Tailwind size class
-  - [ ] 13.3 `PetStats.tsx`: render HP / Hunger / Mood `StatBar` components with labels
-  - [ ] 13.4 Hide stat bars for `egg` stage
+- [x] 13. (Week 2) Implement `PetSprite.tsx` and `PetStats.tsx` components
+  - [x] 13.1 `PetSprite.tsx`: map `PetStage` → correct sprite filename and alt text
+  - [x] 13.2 `PetSprite.tsx`: apply `pixel-art` CSS class and correct Tailwind size class
+  - [x] 13.3 `PetStats.tsx`: render HP / Hunger / Mood `StatBar` components with labels
+  - [x] 13.4 Hide stat bars for `egg` stage
     - Files: `src/components/pet/PetSprite.tsx`, `src/components/pet/PetStats.tsx`
   _Requirements: 1.3, 2.2, 3.2, 3.3_
 
-- [ ] 14. (Week 2) Implement `Tombstone.tsx` and `EggHatch.tsx` components
-  - [ ] 14.1 `Tombstone.tsx`: display tombstone sprite, overlay epitaph, show "New Egg" button after 1.5s
-  - [ ] 14.2 `EggHatch.tsx`: shake → crack → dissolve animation (0.8s, Framer Motion stepped)
-  - [ ] 14.3 Both components: respect `prefers-reduced-motion` via `useReducedMotion()`
+- [x] 14. (Week 2) Implement `Tombstone.tsx` and `EggHatch.tsx` components
+  - [x] 14.1 `Tombstone.tsx`: display tombstone sprite, overlay epitaph, show "New Egg" button after 1.5s
+  - [x] 14.2 `EggHatch.tsx`: shake → crack → dissolve animation (0.8s, Framer Motion stepped)
+  - [x] 14.3 Both components: respect `prefers-reduced-motion` via `useReducedMotion()`
     - Files: `src/components/pet/Tombstone.tsx`, `src/components/pet/EggHatch.tsx`
   _Requirements: 6.4, 7.1–7.4_
 
