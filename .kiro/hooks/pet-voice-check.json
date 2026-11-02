@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Pet Voice Compliance Check",
+      "description": "When a file in src/lib/ai/ is saved, asks Kiro to review the prompts and dialogue against the pet-voice steering file. Catches tone violations, oversized lines, missing fallbacks, and safety rule breaches.",
+      "trigger": "PostFileSave",
+      "matcher": "src/lib/ai/.*\\.tsx?$",
+      "action": {
+        "type": "agent",
+        "prompt": "A file in src/lib/ai/ was just saved. Review it against .kiro/steering/pet-voice.md and report any violations concisely. Check for: dialogue or example strings exceeding 140 characters, profanity or near-profanity, shaming or cruel language directed at the user, text that resembles medical/mental-health advice, prompt templates that do not quote/escape task names (injection risk), missing Zod validation of LLM responses, missing hardcoded fallback string in the corresponding route handler, epitaph prompts that do not request referencing actual task names, nag prompts that omit escalation level mapping. List each violation as a short bullet with the line number. If there are no violations, say 'Pet voice: ✅ no violations found.'"
+      }
+    }
+  ]
+}
