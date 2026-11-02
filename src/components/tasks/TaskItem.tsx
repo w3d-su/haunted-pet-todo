@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { useSound } from "@/components/providers/SoundProvider";
 import { PixelButton } from "@/components/ui/PixelButton";
 import { SubtaskList } from "@/components/tasks/SubtaskList";
 import type { TaskView } from "@/components/tasks/TaskList";
@@ -20,6 +19,8 @@ export function TaskItem({
   onBreakdown,
   onDragStart,
   onDrop,
+  onMoveUp,
+  onMoveDown,
 }: {
   task: TaskView;
   pending: boolean;
@@ -27,16 +28,30 @@ export function TaskItem({
   onBreakdown: (id: string) => void;
   onDragStart: (id: string) => void;
   onDrop: (targetId: string) => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }) {
   const reduced = useReducedMotion() === true;
-  const { play } = useSound();
   const [flash, setFlash] = useState(false);
   const done = task.status === "done";
+
+  function onKeyDown(event: KeyboardEvent<HTMLLIElement>) {
+    if (!event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (event.key === "ArrowUp" && onMoveUp) {
+      event.preventDefault();
+      onMoveUp();
+    }
+    if (event.key === "ArrowDown" && onMoveDown) {
+      event.preventDefault();
+      onMoveDown();
+    }
+  }
 
   return (
     <li
       className="relative border-2 border-ghost-dim bg-bg-panel px-3 py-3"
       draggable
+      onKeyDown={onKeyDown}
       onDragStart={() => onDragStart(task.id)}
       onDragOver={(event) => event.preventDefault()}
       onDrop={() => onDrop(task.id)}
@@ -57,20 +72,39 @@ export function TaskItem({
             {task.status}
           </p>
         </div>
-        {done ? null : (
-          <PixelButton
-            disabled={pending}
-            aria-label={`Complete ${task.title}`}
-            onClick={() => {
-              setFlash(true);
-              window.setTimeout(() => setFlash(false), reduced ? 0 : 160);
-              play("task_complete");
-              onComplete(task.id);
-            }}
-          >
-            Done
-          </PixelButton>
-        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          {onMoveUp ? (
+            <PixelButton
+              disabled={pending}
+              aria-label={`Up, move ${task.title}`}
+              onClick={onMoveUp}
+            >
+              Up
+            </PixelButton>
+          ) : null}
+          {onMoveDown ? (
+            <PixelButton
+              disabled={pending}
+              aria-label={`Down, move ${task.title}`}
+              onClick={onMoveDown}
+            >
+              Down
+            </PixelButton>
+          ) : null}
+          {done ? null : (
+            <PixelButton
+              disabled={pending}
+              aria-label={`Complete ${task.title}`}
+              onClick={() => {
+                setFlash(true);
+                window.setTimeout(() => setFlash(false), reduced ? 0 : 160);
+                onComplete(task.id);
+              }}
+            >
+              Done
+            </PixelButton>
+          )}
+        </div>
       </div>
       <SubtaskList
         task={task}

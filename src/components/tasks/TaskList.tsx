@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { reorderTask } from "@/components/tasks/order";
 import { TaskItem } from "@/components/tasks/TaskItem";
 
 export interface TaskView {
@@ -44,13 +45,22 @@ export function TaskList({
     onReorder(next);
   }
 
+  function move(id: string, direction: -1 | 1) {
+    const next = reorderTask(
+      tasks.map((task) => task.id),
+      id,
+      direction,
+    );
+    if (next) onReorder(next);
+  }
+
   if (tasks.length === 0) {
     return <p className="mt-6 text-[10px] leading-relaxed text-ghost-dim">No tasks yet. The egg is waiting.</p>;
   }
 
   return (
     <ul className="mt-6 flex flex-col gap-3">
-      {tasks.map((task) => (
+      {tasks.map((task, index) => (
         <TaskItem
           key={task.id}
           task={task}
@@ -59,6 +69,8 @@ export function TaskList({
           onBreakdown={onBreakdown}
           onDragStart={setDraggedId}
           onDrop={drop}
+          onMoveUp={index > 0 ? () => move(task.id, -1) : undefined}
+          onMoveDown={index < tasks.length - 1 ? () => move(task.id, 1) : undefined}
         />
       ))}
     </ul>

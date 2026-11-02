@@ -5,9 +5,9 @@ import { motion, useReducedMotion } from "framer-motion";
 import { PixelButton } from "@/components/ui/PixelButton";
 
 const ACTIONS = [
-  { key: "1", label: "+1h", name: "Advance time by 1 hour", body: { hours: 1 } },
-  { key: "6", label: "+6h", name: "Advance time by 6 hours", body: { hours: 6 } },
-  { key: "24", label: "+24h", name: "Advance time by 24 hours", body: { hours: 24 } },
+  { key: "1", label: "+1h", name: "+1h, advance time by 1 hour", body: { hours: 1 } },
+  { key: "6", label: "+6h", name: "+6h, advance time by 6 hours", body: { hours: 6 } },
+  { key: "24", label: "+24h", name: "+24h, advance time by 24 hours", body: { hours: 24 } },
   { key: "reset", label: "Reset", name: "Reset the demo clock", body: { reset: true } },
 ] as const;
 

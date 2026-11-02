@@ -56,9 +56,7 @@ export function ZombieLayer() {
       seen.current = new Set(ids);
       return;
     }
-    for (const id of ids) {
-      if (!known.has(id)) play("zombie_spawn");
-    }
+    if (ids.some((id) => !known.has(id))) play("zombie_spawn");
     seen.current = new Set(ids);
   }, [signature, play]);
 

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { ESLint } from "eslint";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 
@@ -27,44 +27,97 @@ it("src/lib/game does not call Date.now or new Date", async () => {
   }
 });
 
-function runDateGuard(filePath: string, raw = JSON.stringify({ event: { file_path: filePath } })) {
-  return spawnSync(process.execPath, [".kiro/hooks/no-date-now-guard.mjs"], {
-    input: raw,
+const clockFile = path.resolve("src/lib/game/clock.ts");
+
+function hookEnv(filePath?: string): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.KIRO_FILE_PATH;
+  if (filePath) env.KIRO_FILE_PATH = filePath;
+  return env;
+}
+
+function runDateGuard(options: { args?: string[]; input?: string; envPath?: string }) {
+  return spawnSync(process.execPath, [".kiro/hooks/no-date-now-guard.mjs", ...(options.args ?? [])], {
+    input: options.input ?? "",
     encoding: "utf8",
-    env: { ...process.env, KIRO_FILE_PATH: path.resolve("src/lib/server/clock.ts") },
+    env: hookEnv(options.envPath),
   });
 }
 
-it("date guard reads event.file_path from stdin and ignores KIRO_FILE_PATH", () => {
-  const result = runDateGuard(path.resolve("src/lib/game/clock.ts"));
-  expect(result.status).toBe(0);
-  expect(result.stdout).toBe("");
-  expect(result.stderr).toBe("");
+async function wallClockMessages(code: string) {
+  const eslint = new ESLint({ cwd: process.cwd() });
+  const [result] = await eslint.lintText(code, { filePath: "src/lib/game/fixture.ts" });
+  return (result?.messages ?? []).filter((message) => message.ruleId === "haunted/no-wall-clock");
+}
+
+it("wall clock rule flags computed access, spacing, new Date, aliases, and global prefixes", async () => {
+  const violations = [
+    "export const n = Date.now();\n",
+    "export const n = Date['now']();\n",
+    "export const n = Date.now ();\n",
+    "export const n = new Date;\n",
+    "export const n = new Date();\n",
+    "const D = Date;\nexport const n = D.now();\n",
+    "const D = Date;\nexport const n = new D;\n",
+    "export const n = window.Date.now();\n",
+    "export const n = globalThis.Date;\n",
+  ];
+  for (const code of violations) {
+    expect(await wallClockMessages(code), code).not.toEqual([]);
+  }
 });
 
-it("date guard writes a Date.now violation to stderr and exits 1", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "date-guard-"));
-  const file = path.join(dir, "clock.ts");
-  writeFileSync(file, "export const leaked = Date.now();\n");
-  const result = runDateGuard(file);
-  expect(result.status).toBe(1);
-  expect(result.stdout).toBe("");
-  expect(result.stderr).toMatch(/Date\.now\(\)/);
+it("wall clock rule ignores comments, strings, and an unused alias", async () => {
+  const clean = [
+    "export const note = \"Date.now()\";\nexport const also = 'new Date';\n",
+    "// Date.now()\n/* new Date() */\nexport const templated = `Date['now']()`;\n",
+    "const D = Date;\nexport const kept = D;\n",
+  ];
+  for (const code of clean) {
+    expect(await wallClockMessages(code), code).toEqual([]);
+  }
 });
 
-it("date guard writes a new Date violation to stderr", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "date-guard-"));
-  const file = path.join(dir, "clock.ts");
-  writeFileSync(file, "export const leaked = new Date();\n");
-  const result = runDateGuard(file);
-  expect(result.status).toBe(1);
-  expect(result.stdout).toBe("");
-  expect(result.stderr).toMatch(/new Date\(\)/);
+it("date guard accepts the path from a CLI arg, an env var, or stdin JSON", () => {
+  const clean = { status: 0, stdout: "", stderr: "" };
+  expect(runDateGuard({ args: [clockFile] })).toMatchObject(clean);
+  expect(runDateGuard({ envPath: clockFile })).toMatchObject(clean);
+  expect(
+    runDateGuard({ input: JSON.stringify({ event: { file_path: clockFile } }) }),
+  ).toMatchObject(clean);
 });
 
-it("date guard fails closed when event.file_path is missing", () => {
-  const result = runDateGuard("", "{}");
+it("date guard reports the shared rule on stderr for a computed Date.now", () => {
+  const dir = mkdtempSync(path.join("src/lib/game", `date-guard-${process.pid}-`));
+  const file = path.join(dir, "leaky.ts");
+  try {
+    writeFileSync(file, "export const leaked = Date['now']();\n");
+    const result = runDateGuard({ args: [path.resolve(file)] });
+    expect(result.status).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toMatch(/Date\.now\(\)/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("date guard allows comments and strings that mention the clock", () => {
+  const dir = mkdtempSync(path.join("src/lib/game", `date-guard-clean-${process.pid}-`));
+  const file = path.join(dir, "comment.ts");
+  try {
+    writeFileSync(file, "// Date.now()\nexport const note = \"new Date()\";\n");
+    const result = runDateGuard({ envPath: path.resolve(file) });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+it("date guard fails closed when no path is provided", () => {
+  const result = runDateGuard({ input: "{}" });
   expect(result.status).toBe(1);
   expect(result.stdout).toBe("");
-  expect(result.stderr).toMatch(/event\.file_path/);
+  expect(result.stderr).toMatch(/file path/);
 });

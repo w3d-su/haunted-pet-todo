@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useSound } from "@/components/providers/SoundProvider";
 import { hpSpent, type PetState } from "@/lib/game/pet";
 import type { TaskView } from "@/components/tasks/TaskList";
 import { breakdownFailureIsQuiet } from "@/components/tasks/breakdown-ui";
@@ -99,6 +100,7 @@ export function GameStateProvider({
   demoMode: boolean;
   children: ReactNode;
 }) {
+  const { play } = useSound();
   const [pet, setPet] = useState<PetState | null>(null);
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [now, setNow] = useState(0);
@@ -272,6 +274,7 @@ export function GameStateProvider({
           body: JSON.stringify({ id, status: "done" }),
         });
         if (!response.ok) throw new Error(await failureMessage(response, "That task would not close."));
+        play("task_complete");
         const body = (await response.json()) as { emitted?: { type: string }[]; pet?: PetState };
         if (!body.pet || !hpSpent(body.pet.hp)) noticeEvolution(body.emitted);
         await refresh();

@@ -3,13 +3,13 @@
   "hooks": [
     {
       "name": "No Date.now() in Game Core",
-      "description": "After a save under src/lib/game, reads event.file_path from stdin JSON and rejects Date.now(), new Date(), and globalThis.Date. The violation is written to stderr and the process exits 1. PostFileSave cannot block the save. CI runs the same rule through ESLint.",
+      "description": "After a save under src/lib/game, lints that file with the repo ESLint config (haunted/no-wall-clock). The path comes from the {{filePath}} argument, KIRO_FILE_PATH, or stdin JSON event.file_path. A violation is written to stderr and the process exits 1. PostFileSave cannot block the save.",
       "trigger": "PostFileSave",
       "matcher": "src/lib/game/.*\\.tsx?$",
+      "timeout": 15,
       "action": {
         "type": "command",
-        "command": "node .kiro/hooks/no-date-now-guard.mjs",
-        "timeout": 15
+        "command": "node .kiro/hooks/no-date-now-guard.mjs {{filePath}}"
       }
     }
   ]

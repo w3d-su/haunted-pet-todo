@@ -1,43 +1,60 @@
-import { readFileSync } from "node:fs";
+import { ESLint } from "eslint";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-// The save hook passes `{ event: { file_path } }` on stdin.
-// The path is not taken from $KIRO_FILE_PATH.
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const RULE = "haunted/no-wall-clock";
 
-const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
-const raw = Buffer.concat(chunks).toString("utf8").trim();
-
-let filePath = "";
-try {
-  const payload = JSON.parse(raw);
+function fromStdin(raw) {
+  if (!raw) return "";
+  let payload;
+  try {
+    payload = JSON.parse(raw);
+  } catch {
+    console.error("no-date-now-guard: expected JSON on stdin with event.file_path");
+    process.exit(1);
+  }
   const candidate = payload?.event?.file_path;
-  if (typeof candidate === "string") filePath = candidate;
-} catch {
-  console.error("no-date-now-guard: expected JSON on stdin with event.file_path");
-  process.exit(1);
+  return typeof candidate === "string" ? candidate.trim() : "";
 }
 
-if (filePath.length === 0) {
-  console.error("no-date-now-guard: missing event.file_path");
-  process.exit(1);
+async function readStdin() {
+  if (process.stdin.isTTY) return "";
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-let source = "";
-try {
-  source = readFileSync(filePath, "utf8");
-} catch {
-  console.error(`no-date-now-guard: cannot read ${filePath}`);
-  process.exit(1);
-}
+// CLI arg (Kiro {{filePath}}), then KIRO_FILE_PATH, then stdin JSON.
+const fromArg = process.argv[2]?.trim() ?? "";
+const fromEnv = process.env.KIRO_FILE_PATH?.trim() ?? "";
+const filePath = fromArg || fromEnv || fromStdin(fromArg || fromEnv ? "" : await readStdin());
 
-const hits = [];
-if (source.includes("Date.now(")) hits.push("Date.now()");
-if (source.includes("new Date(")) hits.push("new Date()");
-if (source.includes("globalThis.Date")) hits.push("globalThis.Date");
-
-if (hits.length > 0) {
+if (!filePath) {
   console.error(
-    `no-date-now-guard: ${filePath} uses ${hits.join(", ")}. Pass a now: number or a Clock.`,
+    "no-date-now-guard: missing file path (argument, KIRO_FILE_PATH, or stdin event.file_path)",
   );
   process.exit(1);
 }
+
+const eslint = new ESLint({ cwd: root });
+let results;
+try {
+  results = await eslint.lintFiles([path.resolve(filePath)]);
+} catch (error) {
+  const message = error instanceof Error ? error.message : "eslint failed";
+  console.error(`no-date-now-guard: ${message}`);
+  process.exit(1);
+}
+
+let failed = false;
+for (const result of results) {
+  for (const message of result.messages) {
+    if (message.ruleId !== RULE && !message.fatal) continue;
+    failed = true;
+    const line = message.line ?? 1;
+    console.error(`no-date-now-guard: ${filePath}:${line} ${message.message}`);
+  }
+}
+
+if (failed) process.exit(1);

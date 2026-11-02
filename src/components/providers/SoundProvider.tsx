@@ -46,18 +46,26 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   const loading = useRef(new Map<SoundName, Promise<AudioBuffer | null>>());
 
   useEffect(() => {
-    if (window.localStorage.getItem(STORAGE_KEY) === "false") {
-      mutedRef.current = false;
-      setMuted(false);
+    try {
+      if (window.localStorage.getItem(STORAGE_KEY) === "false") {
+        mutedRef.current = false;
+        setMuted(false);
+      }
+    } catch {
+      // Storage can throw. Muted stays the default.
     }
   }, []);
 
   const audioContext = useCallback(() => {
     const existing = ctxRef.current;
     if (existing) return existing;
-    const next = new AudioContext();
-    ctxRef.current = next;
-    return next;
+    try {
+      const next = new AudioContext();
+      ctxRef.current = next;
+      return next;
+    } catch {
+      return null;
+    }
   }, []);
 
   const load = useCallback((name: SoundName, ctx: AudioContext) => {
@@ -73,9 +81,13 @@ export function SoundProvider({ children }: { children: ReactNode }) {
       .then((bytes) => ctx.decodeAudioData(bytes))
       .then((buffer) => {
         buffers.current.set(name, buffer);
+        loading.current.delete(name);
         return buffer;
       })
-      .catch(() => null);
+      .catch(() => {
+        loading.current.delete(name);
+        return null;
+      });
     loading.current.set(name, request);
     return request;
   }, []);
@@ -83,7 +95,8 @@ export function SoundProvider({ children }: { children: ReactNode }) {
   const preload = useCallback(() => {
     if (mutedRef.current || !gesturedRef.current) return;
     const ctx = audioContext();
-    void ctx.resume();
+    if (!ctx) return;
+    void ctx.resume().catch(() => {});
     for (const name of Object.keys(SOUND_FILES) as SoundName[]) void load(name, ctx);
   }, [audioContext, load]);
 
@@ -104,7 +117,11 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     const next = !mutedRef.current;
     mutedRef.current = next;
     setMuted(next);
-    window.localStorage.setItem(STORAGE_KEY, next ? "true" : "false");
+    try {
+      window.localStorage.setItem(STORAGE_KEY, next ? "true" : "false");
+    } catch {
+      // The choice still applies for this page load.
+    }
     if (!next) preload();
   }, [preload]);
 
@@ -112,6 +129,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
     (name: SoundName) => {
       if (mutedRef.current || !gesturedRef.current) return;
       const ctx = audioContext();
+      if (!ctx) return;
       void ctx.resume().then(async () => {
         if (mutedRef.current) return;
         const buffer = await load(name, ctx);
@@ -120,7 +138,7 @@ export function SoundProvider({ children }: { children: ReactNode }) {
         source.buffer = buffer;
         source.connect(ctx.destination);
         source.start();
-      });
+      }).catch(() => {});
     },
     [audioContext, load],
   );

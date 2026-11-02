@@ -86,7 +86,9 @@ export function createMemoryWorld(): MemoryWorld {
 
   const taskStore: TaskStore = {
     async getTasks(userId) {
-      return tasks.filter((task) => task.userId === userId && task.deletedAt === null);
+      return tasks
+        .filter((task) => task.userId === userId && task.deletedAt === null)
+        .sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt - right.createdAt);
     },
     async upsertTask(task) {
       const stored = persistTask(task);
