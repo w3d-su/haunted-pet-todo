@@ -564,10 +564,18 @@ it("P20 N hourly ticks match one N-hour tick", () => {
           expect(once.hp).toBe(state.hp);
         }
 
-        const quiet = owned.map((task) =>
-          task.status === "overdue" ? { ...task, status: "done" as const } : task,
-        );
-        const quietTick = runOneTick(state, quiet, start + hours * HOUR);
+        const end = start + hours * HOUR;
+        // A todo that comes due inside the window becomes a zombie. decayStats
+        // does not include that drain, so only tasks that stay quiet are compared.
+        const quiet = owned.map((task) => {
+          const haunts =
+            task.deletedAt === null &&
+            task.status !== "done" &&
+            task.dueAt !== null &&
+            task.dueAt <= end;
+          return haunts ? { ...task, status: "done" as const } : task;
+        });
+        const quietTick = runOneTick(state, quiet, end);
         const decayed = decayStats(state, start + hours * HOUR);
         if (quietTick.status === "alive") {
           expect(Math.abs(quietTick.hp - decayed.hp)).toBeLessThanOrEqual(1);

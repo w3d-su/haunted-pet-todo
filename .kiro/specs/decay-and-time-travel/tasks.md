@@ -91,7 +91,7 @@
 
 - [x] 10. (Week 2) Write property test for Property P20 (fast-forward N hours = N ticks)
   - [x] 10.1 `runOneTick(pet, tasks, now)` in `src/lib/game/pet.ts` returns `catchUp(...).state`. It lives next to catch-up so `decay.ts` does not import the reducer (that import would cycle).
-  - [x] 10.2 Write PBT: for N ∈ {1, 6, 24}, N hourly `runOneTick` calls match one N-hour `runOneTick` within ±1. With no active zombie and the pet still alive, that also matches `decayStats` within ±1. Eggs keep their HP.
+  - [x] 10.2 Write PBT: for N ∈ {1, 6, 24}, N hourly `runOneTick` calls match one N-hour `runOneTick` within ±1. With no zombie during the window (including a todo that comes due inside it) and the pet still alive, that also matches `decayStats` within ±1. Eggs keep their HP.
     - Files: `tests/game/invariants.property.ts`, `src/lib/game/pet.ts`
   _Requirements: 7.4, P20_
 
