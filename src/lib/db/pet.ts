@@ -1,11 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { clampFutureTaskTimes } from "@/lib/game/tasks";
 import {
+  clampFuturePetTimes,
   PET_STAGES,
   PET_STATUSES,
   type PetState,
   type TombstoneRecord,
 } from "@/lib/game/pet";
+import { taskFromRow, taskToRow } from "@/lib/db/tasks";
 
 const TombstoneRecordSchema = z.object({
   id: z.string().min(1),
@@ -184,6 +187,64 @@ export async function savePetState(
     .eq("id", state.id)
     .eq("user_id", state.userId)
     .eq("version", expectedVersion)
+    .select("*")
+    .maybeSingle();
+  throwOnError(updated.error);
+  if (!updated.data) return null;
+  return petRecordFromRow(updated.data);
+}
+
+/** Every pet row. The cron walks these with the service role. */
+export async function listPetUserIds(supabase: SupabaseClient): Promise<string[]> {
+  const { data, error } = await supabase.from("pet_state").select("user_id");
+  throwOnError(error);
+  return z
+    .array(z.object({ user_id: z.uuid() }))
+    .parse(data ?? [])
+    .map((row) => row.user_id);
+}
+
+/**
+ * Persist a demo clock offset. Compare-and-swap on `version` so a catch-up
+ * save cannot put the old offset back. `clampTo` pulls future cursors down
+ * to the reset instant; due dates are not rewritten.
+ */
+export async function setClockOffset(
+  supabase: SupabaseClient,
+  userId: string,
+  clockOffsetMs: number,
+  clampTo: number | null,
+): Promise<PetRecord | null> {
+  if (!Number.isSafeInteger(clockOffsetMs) || clockOffsetMs < 0) {
+    throw new Error("clock offset must be a non-negative integer");
+  }
+  const current = await getPetRecord(supabase, userId);
+  if (!current) return null;
+  const state = clampTo === null ? current.state : clampFuturePetTimes(current.state, clampTo);
+  if (clampTo !== null) {
+    const listed = await supabase.from("tasks").select("*").eq("user_id", userId);
+    throwOnError(listed.error);
+    const tasks = z.array(z.unknown()).parse(listed.data ?? []).map((row) => taskFromRow(row));
+    for (const task of tasks) {
+      const next = clampFutureTaskTimes(task, clampTo);
+      if (next === task) continue;
+      const written = await supabase
+        .from("tasks")
+        .update(taskToRow(next))
+        .eq("id", task.id)
+        .eq("user_id", userId);
+      throwOnError(written.error);
+    }
+  }
+  const updated = await supabase
+    .from("pet_state")
+    .update({
+      ...petStateToRow(state),
+      clock_offset_ms: clockOffsetMs,
+      version: current.version + 1,
+    })
+    .eq("user_id", userId)
+    .eq("version", current.version)
     .select("*")
     .maybeSingle();
   throwOnError(updated.error);

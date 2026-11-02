@@ -432,6 +432,54 @@ export function catchUp(pet: PetState, tasks: readonly Task[], now: number): Cat
   return { state, tasks: taskList, emitted, overdueTaskIds: marked.overdueTaskIds };
 }
 
+/**
+ * One catch-up to `now`. Cron, fast-forward, and property P20 share this
+ * with ordinary reads (`catchUp`) so an hour-step and a multi-hour step
+ * cannot drift apart.
+ */
+export function runOneTick(pet: PetState, tasks: readonly Task[], now: number): PetState {
+  return catchUp(pet, tasks, now).state;
+}
+
+function notAfter(value: number | null, now: number): number | null {
+  if (value === null || value <= now) return value;
+  return now;
+}
+
+/**
+ * Pull clock cursors back to `now` after a demo reset. A future `lastTickAt`
+ * makes later decay a no-op. Due dates are not cursors and are not touched.
+ */
+export function clampFuturePetTimes(state: PetState, now: number): PetState {
+  const lastTickAt = notAfter(state.lastTickAt, now);
+  const lastCompletionAt = notAfter(state.lastCompletionAt, now);
+  const becameAdultAt = notAfter(state.becameAdultAt, now);
+  const diedAt = notAfter(state.diedAt, now);
+  const recentCompletionTimestamps = state.recentCompletionTimestamps.map((stamp) =>
+    stamp > now ? now : stamp,
+  );
+  const recentUnchanged = recentCompletionTimestamps.every(
+    (stamp, index) => stamp === state.recentCompletionTimestamps[index],
+  );
+  if (
+    lastTickAt === state.lastTickAt &&
+    lastCompletionAt === state.lastCompletionAt &&
+    becameAdultAt === state.becameAdultAt &&
+    diedAt === state.diedAt &&
+    recentUnchanged
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    lastTickAt,
+    lastCompletionAt,
+    becameAdultAt,
+    diedAt,
+    recentCompletionTimestamps,
+  };
+}
+
 /** Display value. Not written back on read; `becameAdultAt` is the source of truth. */
 export function deriveHoursAsAdult(state: PetState, now: number): PetState {
   if (state.becameAdultAt === null) return state;

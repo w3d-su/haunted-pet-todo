@@ -48,7 +48,7 @@ This file defines the single authoritative execution order for a coding agent wo
 
 | Order | Spec / Task | What it creates |
 |---|---|---|
-| 1 | decay-and-time-travel/tasks.md task 6 | `src/app/api/cron/decay/route.ts` (full cron handler — decay + zombie drain + epitaph trigger) |
+| 1 | decay-and-time-travel/tasks.md task 6 | `src/app/api/cron/decay/route.ts` (full cron handler — decay + zombie drain). Epitaph POST stays Week 3. |
 | 2 | decay-and-time-travel/tasks.md task 7 | `vercel.json` daily cron (`0 8 * * *`) only after the cron route exists. Hobby cannot run an hourly cron. |
 | 3 | task-lifecycle/tasks.md task 12 | Extend `src/app/api/cron/decay/route.ts` with overdue-task check and `TASK_OVERDUE` events |
 | 4 | decay-and-time-travel/tasks.md task 8 | `src/app/api/demo/fast-forward/route.ts` |

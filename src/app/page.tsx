@@ -1,4 +1,7 @@
-export default function HomePage() {
+import { HauntApp } from "@/components/providers/HauntApp";
+import { demoModeEnabled } from "@/lib/server/env";
+
+function Landing() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-bg-void px-6 py-16 text-ghost-white">
       <section className="w-full max-w-xl border-2 border-ghost-white bg-bg-panel px-6 py-8 text-center">
@@ -11,4 +14,11 @@ export default function HomePage() {
       </section>
     </main>
   );
+}
+
+export default function HomePage() {
+  const demoMode = demoModeEnabled();
+  const canPlay = demoMode || Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
+  if (!canPlay) return <Landing />;
+  return <HauntApp demoMode={demoMode} />;
 }

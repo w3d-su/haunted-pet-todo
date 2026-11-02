@@ -11,6 +11,7 @@ import {
   catchUp,
   clampStats,
   rebirthPet,
+  runOneTick,
   type PetState,
   type PetStage,
   type PetStatus,
@@ -529,6 +530,50 @@ it("P19b split catch-up through row serialization matches one catch-up", () => {
         expect(Math.abs(current.hp - whole.hp)).toBeLessThan(1e-6);
         expect(Math.abs(current.hunger - whole.hunger)).toBeLessThan(1e-6);
         expect(Math.abs(current.mood - whole.mood)).toBeLessThan(1e-6);
+      },
+    ),
+  );
+});
+
+it("P20 N hourly ticks match one N-hour tick", () => {
+  check(
+    fc.property(
+      arbAlivePetState,
+      fc.array(arbTask, { maxLength: 3 }),
+      fc.constantFrom(1, 6, 24),
+      (state, tasks, hours) => {
+        const start = state.lastTickAt ?? MIN;
+        const owned = tasks.map((task) => ({
+          ...task,
+          userId: state.userId,
+          dueAt: task.status === "overdue" ? Math.min(task.dueAt ?? start, start) : task.dueAt,
+        }));
+        let stepped: PetState = state;
+        for (let hour = 1; hour <= hours; hour += 1) {
+          stepped = runOneTick(stepped, owned, start + hour * HOUR);
+        }
+        const once = runOneTick(state, owned, start + hours * HOUR);
+        expect(stepped.status).toBe(once.status);
+        expect(stepped.stage).toBe(once.stage);
+        expect(stepped.currentStreak).toBe(once.currentStreak);
+        expect(Math.abs(stepped.hp - once.hp)).toBeLessThanOrEqual(1);
+        expect(Math.abs(stepped.hunger - once.hunger)).toBeLessThanOrEqual(1);
+        expect(Math.abs(stepped.mood - once.mood)).toBeLessThanOrEqual(1);
+        if (state.stage === "egg") {
+          expect(stepped.hp).toBe(state.hp);
+          expect(once.hp).toBe(state.hp);
+        }
+
+        const quiet = owned.map((task) =>
+          task.status === "overdue" ? { ...task, status: "done" as const } : task,
+        );
+        const quietTick = runOneTick(state, quiet, start + hours * HOUR);
+        const decayed = decayStats(state, start + hours * HOUR);
+        if (quietTick.status === "alive") {
+          expect(Math.abs(quietTick.hp - decayed.hp)).toBeLessThanOrEqual(1);
+          expect(Math.abs(quietTick.hunger - decayed.hunger)).toBeLessThanOrEqual(1);
+          expect(Math.abs(quietTick.mood - decayed.mood)).toBeLessThanOrEqual(1);
+        }
       },
     ),
   );

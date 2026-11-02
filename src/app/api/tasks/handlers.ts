@@ -89,7 +89,7 @@ export async function getTasksRoute(request: Request, deps: AppDeps): Promise<Re
       request.headers.get("x-time-zone"),
       deps.newId,
     );
-    return json({ tasks: nestTasks(world.tasks, world.now) });
+    return json({ tasks: nestTasks(world.tasks, world.now), now: world.now });
   } catch (error) {
     return storageFailure(error);
   }

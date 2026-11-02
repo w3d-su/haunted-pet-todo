@@ -23,7 +23,7 @@ export async function getPet(request: Request, deps: AppDeps): Promise<Response>
       request.headers.get("x-time-zone"),
       deps.newId,
     );
-    return json({ pet: world.pet });
+    return json({ pet: world.pet, now: world.now, clockOffsetMs: world.clockOffsetMs });
   } catch (error) {
     return storageFailure(error);
   }
