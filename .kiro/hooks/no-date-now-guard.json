@@ -5,7 +5,7 @@
       "name": "No Date.now() in Game Core",
       "description": "After a save under src/lib/game, runs node_modules/.bin/eslint on that file for haunted/no-wall-clock. The path comes from the {{filePath}} argument, KIRO_FILE_PATH, or stdin JSON (event.file_path, event.filePath, or filePath). A missing, blank, unexpanded, or absent path warns on stderr and exits 0. A violation exits 1. PostFileSave cannot block the save.",
       "trigger": "PostFileSave",
-      "matcher": "src/lib/game/.*\\.tsx?$",
+      "matcher": "(^|[\\\\/])src[\\\\/]lib[\\\\/]game[\\\\/].*\\.tsx?$",
       "timeout": 15,
       "action": {
         "type": "command",

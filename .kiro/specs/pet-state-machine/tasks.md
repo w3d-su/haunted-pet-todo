@@ -105,7 +105,7 @@
   - [x] 11b.2 Local `supabase/config.toml` sets `enable_anonymous_sign_ins`. Hosted projects enable the same provider in the dashboard (Auth settings are not a SQL migration)
   - [x] 11b.3 README documents the browser sign-in, the bearer token, and `X-Time-Zone` on the first pet read only
     - Files: `src/lib/db/auth.ts`, `supabase/config.toml`, `README.md`
-  _Note: `src/app/api/auth/anonymous/route.ts` was never created. Sign-in is client-only in `GameStateProvider.tsx` (`supabase.auth.signInAnonymously()`). `src/lib/db/auth.ts` only resolves a bearer access token. The README documents the per-IP limit that a server route would hit._
+  _Note: `src/app/api/auth/anonymous/route.ts` was added in `d19675182c14855580acc67eb00359d7be51c527` and removed in `cf11d891cef262ed18180f7e79fca1d80d6bd98a`. The removal is deliberate: that commit's README says a server proxy would spend Supabase's per-IP anonymous sign-in limit (30/hour) on Vercel's address, so the browser calls `supabase.auth.signInAnonymously()` in `GameStateProvider.tsx`. `src/lib/db/auth.ts` only resolves a bearer access token._
   _Requirements: RLS needs `auth.uid()`; anonymous users are real `auth.users` rows_
 
 ## Week 2 (Nov 9–16): Pet API, Basic UI

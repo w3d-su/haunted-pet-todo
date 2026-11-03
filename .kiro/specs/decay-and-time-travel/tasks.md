@@ -130,7 +130,7 @@
 
 ## Week 4 (Nov 23–30): Polish, Accessibility, Final Tests
 
-- [x] 16. (Week 4) Fix and verify `no-date-now-guard` hook
+- [ ] 16. (Week 4) Fix and verify `no-date-now-guard` hook
   - [x] 16.1 Confirm hook reads file path from stdin JSON (`event.file_path`) via Node, not `$KIRO_FILE_PATH`
   - [x] 16.2 Confirm violation message is written to stderr (exit 1) not stdout
   - [ ] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output. Still needs a live test in Kiro.
