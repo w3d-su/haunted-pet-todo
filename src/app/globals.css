@@ -18,10 +18,11 @@
   --color-scanline: rgba(0, 0, 0, 0.18);
   --color-vignette-start: rgba(0, 0, 0, 0);
   --color-vignette-end: rgba(0, 0, 0, 0.72);
-  /* Pixel steps in the components are 8 / 10 / 16. Scale multiplies all of them. */
+  /* Pixel steps in the components are 8 / 10 / 16. Scale multiplies all of them.
+     1.75 makes the 8px labels 14px and the 10px hints 17.5px. */
   --font-base: 16px;
-  --pixel-scale: 1;
-  --pet-scale: 4;
+  --pixel-scale: 1.75;
+  --pet-scale: 7;
 }
 
 html {
@@ -52,7 +53,7 @@ body {
   font-size: calc(16px * var(--pixel-scale));
 }
 
-/* Integer display size: source pixels × --pet-scale. 4× below desktop, 8× at 1024+. */
+/* Integer display size: source pixels × --pet-scale. 7× below desktop, 8× at 1024+. */
 .pixel-art.h-16.w-16 {
   width: calc(16px * var(--pet-scale));
   height: calc(16px * var(--pet-scale));
@@ -66,6 +67,28 @@ body {
 .pixel-art.h-32.w-24 {
   width: calc(24px * var(--pet-scale));
   height: calc(32px * var(--pet-scale));
+}
+
+/* Stat columns were fixed rem widths sized for 8px type. Track the scaled font. */
+span.w-16 {
+  width: 6.5em;
+}
+
+span.w-8 {
+  width: 3.5em;
+}
+
+/* The native date control is wider than the card at 17.5px. 14px still clears the minimum and keeps the full placeholder plus the picker icon inside the field. */
+@media (max-width: 1023px) {
+  input[type="datetime-local"] {
+    font-size: 14px;
+    padding-inline: 4px;
+  }
+
+  input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    margin: 0;
+    padding: 0;
+  }
 }
 
 @media (min-width: 1024px) {
@@ -84,15 +107,6 @@ body {
   .pixel-art.h-12.w-12 {
     width: 48px;
     height: 48px;
-  }
-
-  /* Stat columns were fixed rem widths sized for 8px type. Track the scaled font. */
-  span.w-16 {
-    width: 6.5em;
-  }
-
-  span.w-8 {
-    width: 3.5em;
   }
 }
 
