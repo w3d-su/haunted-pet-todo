@@ -66,11 +66,49 @@ const noWallClock = {
       // ESLint records globalThis with an empty def list. window and self are often unbound.
       if (!variable || variable.defs.length === 0) return GLOBAL_OBJECTS.has(node.name);
       seen.add(node.name);
-      return variable.defs.some((def) => {
-        if (def.node.type !== "VariableDeclarator") return false;
-        const init = def.node.init;
-        return Boolean(init && isGlobalObjectReference(init, seen));
-      });
+      for (const def of variable.defs) {
+        if (def.node.type !== "VariableDeclarator") continue;
+        if (def.node.init && isGlobalObjectReference(def.node.init, seen)) return true;
+      }
+      // `let G2; G2 = globalThis` is the same alias as `const G2 = globalThis`.
+      for (const reference of variable.references) {
+        if (reference.writeExpr && isGlobalObjectReference(reference.writeExpr, seen)) return true;
+      }
+      return false;
+    }
+
+    function destructureSource(pattern) {
+      let current = pattern;
+      while (current?.parent) {
+        const parent = current.parent;
+        if (parent.type === "VariableDeclarator" && parent.id === current) return parent.init ?? null;
+        if (parent.type === "AssignmentExpression" && parent.left === current) return parent.right;
+        if (parent.type === "Property" && parent.value === current && parent.parent?.type === "ObjectPattern") {
+          current = parent.parent;
+          continue;
+        }
+        if (parent.type === "AssignmentPattern" && parent.left === current) {
+          current = parent.parent;
+          continue;
+        }
+        return null;
+      }
+      return null;
+    }
+
+    function isGlobalDestructuredDate(node) {
+      const property = node.parent;
+      if (!property || property.type !== "Property" || property.key !== node || property.computed) return false;
+      if (property.parent?.type !== "ObjectPattern") return false;
+      return isGlobalObjectReference(destructureSource(property.parent));
+    }
+
+    function isUtcOrParse(member) {
+      return (
+        !member.computed &&
+        member.property.type === "Identifier" &&
+        (member.property.name === "UTC" || member.property.name === "parse")
+      );
     }
 
     function isGlobalDate(node) {
@@ -144,7 +182,7 @@ const noWallClock = {
         if (node.name !== "Date" || isTypePosition(node)) return;
         const parent = node.parent;
         if (parent?.type === "MemberExpression" && parent.property === node) return;
-        if (isNonValueDate(node)) return;
+        if (isNonValueDate(node) && !isGlobalDestructuredDate(node)) return;
         if (allowedClockMember(node)) return;
         if (parent?.type === "NewExpression" && parent.callee === node) return;
         if (parent?.type === "MemberExpression" && parent.object === node && isNowProperty(parent)) {
@@ -170,6 +208,7 @@ const noWallClock = {
         if (parent?.type === "MemberExpression" && parent.object === node && isNowProperty(parent)) {
           if (isDirectNowCall(parent)) return;
         }
+        if (parent?.type === "MemberExpression" && parent.object === node && isUtcOrParse(parent)) return;
         report(node, globalDateLabel(node));
       },
     };

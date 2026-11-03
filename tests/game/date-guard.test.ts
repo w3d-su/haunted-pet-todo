@@ -1,12 +1,12 @@
 import { spawnSync } from "node:child_process";
 import { Linter } from "eslint";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
 import noWallClock from "../../eslint/no-wall-clock.mjs";
-import { eslintExecutable, eslintFailed } from "../../.kiro/hooks/no-date-now-guard.mjs";
+import { eslintBinPath, eslintFailed, isInsideRepo } from "../../.kiro/hooks/no-date-now-guard.mjs";
 
 async function typescriptFiles(dir: string): Promise<string[]> {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -150,12 +150,32 @@ it("wall clock rule ignores instanceof Date, Date keys, and shadowed globals", (
   }
 });
 
+it("wall clock rule flags Date destructured from a global object", () => {
+  const cases = [
+    "const { Date: D } = globalThis;\nexport const n = D.now();\n",
+    "const { Date: D } = window;\nexport const n = D.now();\n",
+    "const { Date: D } = self;\nexport const n = D.now();\n",
+    "const g = globalThis;\nconst { Date: D } = g;\nexport const n = D.now();\n",
+    "let G2;\nG2 = globalThis;\nconst { Date: D } = G2;\nexport const n = D.now();\n",
+    "let G2;\nG2 = window;\nexport const n = new G2.Date();\n",
+    "let G2;\nG2 = self;\nexport const n = G2.Date.now();\n",
+  ];
+  for (const code of cases) {
+    expect(wallClockMessages(code), code).not.toEqual([]);
+  }
+});
+
 it("wall clock rule ignores comments, strings, Date.UTC, and Date.parse", () => {
   const clean = [
     "export const note = \"Date.now()\";\nexport const also = 'new Date';\n",
     "// Date.now()\n/* new Date() */\nexport const templated = `Date['now']()`;\n",
     "export const utc = Date.UTC(2026, 0, 1);\n",
     "export const parsed = Date.parse(\"2026-01-01T00:00:00.000Z\");\n",
+    "export const utc = globalThis.Date.UTC(2026, 0, 1);\n",
+    "export const parsed = window.Date.parse(\"2026-01-01T00:00:00.000Z\");\n",
+    "export const parsed = self.Date.parse(\"2026-01-01T00:00:00.000Z\");\n",
+    "const g = globalThis;\nexport const utc = g.Date.UTC(2026, 0, 1);\n",
+    "let G2;\nG2 = globalThis;\nexport const parsed = G2.Date.parse(\"2026-01-01T00:00:00.000Z\");\n",
   ];
   for (const code of clean) {
     expect(wallClockMessages(code), code).toEqual([]);
@@ -176,7 +196,7 @@ it(
 it(
   "date guard reports the shared rule on stderr for a computed Date.now",
   () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "date-guard-"));
+  const dir = mkdtempSync(path.join(process.cwd(), ".date-guard-"));
   const file = path.join(dir, "leaky.ts");
   try {
     writeFileSync(file, "export const leaked = Date['now']();\n");
@@ -192,8 +212,12 @@ it(
 );
 
 it("date guard treats eslint status 2, or a nonzero empty stdout, as failure", () => {
-  expect(eslintExecutable("win32")).toBe("eslint.cmd");
-  expect(eslintExecutable("linux")).toBe("eslint");
+  const bin = eslintBinPath(path.resolve("."));
+  expect(bin.replaceAll("\\", "/")).toMatch(/eslint\/bin\/eslint\.js$/);
+  expect(existsSync(bin)).toBe(true);
+  expect(isInsideRepo(path.resolve("."), "src/lib/game/clock.ts")).toBe(true);
+  expect(isInsideRepo(path.resolve("."), path.resolve("src/lib/game/clock.ts"))).toBe(true);
+  expect(isInsideRepo(path.resolve("."), path.join(tmpdir(), "leak.ts"))).toBe(false);
   expect(eslintFailed(2, "[]")).toBe(true);
   expect(eslintFailed(2, "")).toBe(true);
   expect(eslintFailed(1, "")).toBe(true);
@@ -235,6 +259,25 @@ it(
       expect(result.status).toBe(0);
       expect(result.stdout).toBe("");
       expect(result.stderr).toBe("");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  30_000,
+);
+
+it(
+  "date guard warns and exits 0 for a file outside the repo",
+  () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "date-guard-outside-"));
+    const file = path.join(dir, "leaky.ts");
+    try {
+      writeFileSync(file, "export const leaked = Date.now();\n");
+      const result = runDateGuard({ args: [file] });
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe("");
+      expect(result.stderr).toMatch(/outside the repo/);
+      expect(result.stderr).not.toMatch(/Date\.now\(\)/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

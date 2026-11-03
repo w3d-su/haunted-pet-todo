@@ -1,13 +1,35 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const RULE = "haunted/no-wall-clock";
 
-export function eslintExecutable(platform = process.platform) {
-  return platform === "win32" ? "eslint.cmd" : "eslint";
+/** ESLint's JS entry, resolved from the repo so the path is the same on every OS. */
+export function eslintBinPath(repoRoot) {
+  const require = createRequire(path.join(repoRoot, "package.json"));
+  const pkgPath = require.resolve("eslint/package.json");
+  const binField = JSON.parse(readFileSync(pkgPath, "utf8")).bin;
+  const relative = typeof binField === "string" ? binField : binField?.eslint;
+  if (typeof relative !== "string") throw new Error("eslint bin missing");
+  return path.resolve(path.dirname(pkgPath), relative);
+}
+
+/**
+ * pnpm does not hoist ESLint's plugins. These are the directories the
+ * `.bin` shim would put on NODE_PATH, passed as an env var instead of a shell.
+ */
+export function eslintModulePaths(binPath) {
+  // bin/eslint.js -> package -> the node_modules that holds it -> the pnpm store node_modules.
+  const packageDir = path.dirname(path.dirname(binPath));
+  const candidates = [
+    path.join(packageDir, "node_modules"),
+    path.dirname(packageDir),
+    path.join(path.dirname(path.dirname(path.dirname(packageDir))), "node_modules"),
+  ];
+  return candidates.filter((dir, index) => existsSync(dir) && candidates.indexOf(dir) === index);
 }
 
 /** ESLint status 2 is a crash. Any other nonzero status with no JSON is one too. */
@@ -15,6 +37,14 @@ export function eslintFailed(status, stdout) {
   if (status === 2) return true;
   const text = typeof stdout === "string" ? stdout.trim() : "";
   return typeof status === "number" && status !== 0 && text.length === 0;
+}
+
+export function isInsideRepo(repoRoot, candidate) {
+  const resolved = path.resolve(repoRoot, candidate);
+  const relative = path.relative(repoRoot, resolved);
+  if (relative === "" || relative === ".") return true;
+  if (relative === ".." || relative.startsWith(`..${path.sep}`)) return false;
+  return !path.isAbsolute(relative);
 }
 
 function warn(message) {
@@ -47,16 +77,26 @@ async function readStdin() {
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-function eslintCommand() {
-  // Tests point this at a stand-in binary. Windows needs the .cmd shim.
-  if (process.env.NO_DATE_NOW_ESLINT) return process.env.NO_DATE_NOW_ESLINT;
-  return path.join(root, "node_modules", ".bin", eslintExecutable());
-}
-
 function isDirectRun() {
   const entry = process.argv[1];
   if (!entry) return false;
   return import.meta.url === pathToFileURL(path.resolve(entry)).href;
+}
+
+function runEslint(source) {
+  // Tests point NO_DATE_NOW_ESLINT at a stand-in script. Node runs it directly, never a shell.
+  const override = process.env.NO_DATE_NOW_ESLINT;
+  const script = override || eslintBinPath(root);
+  const env = { ...process.env };
+  if (!override) {
+    const extra = eslintModulePaths(script).join(path.delimiter);
+    if (extra) env.NODE_PATH = env.NODE_PATH ? `${extra}${path.delimiter}${env.NODE_PATH}` : extra;
+  }
+  return spawnSync(
+    process.execPath,
+    [script, "--format", "json", "--stdin", "--stdin-filename", "src/lib/game/hook-target.ts"],
+    { cwd: root, encoding: "utf8", input: source, env },
+  );
 }
 
 async function main() {
@@ -71,6 +111,10 @@ async function main() {
   }
 
   const resolved = path.resolve(root, filePath);
+  if (!isInsideRepo(root, resolved)) {
+    warn(`path is outside the repo: ${filePath}`);
+    process.exit(0);
+  }
   if (!existsSync(resolved)) {
     warn(`file not found: ${filePath}`);
     process.exit(0);
@@ -84,18 +128,14 @@ async function main() {
     process.exit(0);
   }
 
-  // stdin-filename puts the contents under the game-core rule even for a temp path.
-  // The .bin/eslint shim sets NODE_PATH. Importing ESLint from this file does not.
-  const result = spawnSync(
-    eslintCommand(),
-    ["--format", "json", "--stdin", "--stdin-filename", "src/lib/game/hook-target.ts"],
-    {
-      cwd: root,
-      encoding: "utf8",
-      input: source,
-      shell: process.platform === "win32",
-    },
-  );
+  // stdin-filename puts the contents under the game-core rule even for a temp path inside the repo.
+  let result;
+  try {
+    result = runEslint(source);
+  } catch (error) {
+    console.error(`no-date-now-guard: ${error.message}`);
+    process.exit(1);
+  }
 
   if (result.error) {
     console.error(`no-date-now-guard: ${result.error.message}`);
