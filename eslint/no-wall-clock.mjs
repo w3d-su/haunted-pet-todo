@@ -1,15 +1,41 @@
+const GLOBAL_OBJECTS = new Set(["window", "globalThis", "self"]);
+
 function isNowProperty(member) {
   if (!member.computed && member.property.type === "Identifier") return member.property.name === "now";
   if (member.computed && member.property.type === "Literal") return member.property.value === "now";
   return false;
 }
 
-function isGlobalDate(node) {
-  if (!node || node.type !== "MemberExpression") return false;
-  if (node.object.type !== "Identifier") return false;
-  if (node.object.name !== "window" && node.object.name !== "globalThis") return false;
-  if (!node.computed && node.property.type === "Identifier") return node.property.name === "Date";
-  if (node.computed && node.property.type === "Literal") return node.property.value === "Date";
+function isDateProperty(member) {
+  if (!member.computed && member.property.type === "Identifier") return member.property.name === "Date";
+  if (member.computed && member.property.type === "Literal") return member.property.value === "Date";
+  return false;
+}
+
+function isInstanceType(node) {
+  const parent = node.parent;
+  return parent?.type === "BinaryExpression" && parent.operator === "instanceof" && parent.right === node;
+}
+
+/** Date used as a name, not as the global value. `{ Date }` in an object expression still counts. */
+function isNonValueDate(node) {
+  const parent = node.parent;
+  if (!parent) return false;
+  if (isInstanceType(node)) return true;
+  if (parent.type === "Property" && parent.key === node && !parent.computed) {
+    if (parent.shorthand && parent.parent?.type === "ObjectExpression") return false;
+    return true;
+  }
+  if (
+    (parent.type === "PropertyDefinition" ||
+      parent.type === "MethodDefinition" ||
+      parent.type === "TSPropertySignature" ||
+      parent.type === "TSMethodSignature") &&
+    parent.key === node &&
+    !parent.computed
+  ) {
+    return true;
+  }
   return false;
 }
 
@@ -23,22 +49,89 @@ const noWallClock = {
     },
   },
   create(context) {
-    function isDateAlias(name, node) {
+    function findVariable(name, node) {
       let scope = context.sourceCode.getScope(node);
       while (scope) {
         const variable = scope.set.get(name);
-        if (variable) {
-          return variable.defs.some((def) => {
-            if (def.node.type !== "VariableDeclarator") return false;
-            const init = def.node.init;
-            if (!init) return false;
-            if (init.type === "Identifier" && init.name === "Date") return true;
-            return isGlobalDate(init);
-          });
-        }
+        if (variable) return variable;
         scope = scope.upper;
       }
+      return null;
+    }
+
+    function isGlobalObjectReference(node, seen = new Set()) {
+      if (!node || node.type !== "Identifier") return false;
+      if (seen.has(node.name)) return false;
+      const variable = findVariable(node.name, node);
+      // ESLint records globalThis with an empty def list. window and self are often unbound.
+      if (!variable || variable.defs.length === 0) return GLOBAL_OBJECTS.has(node.name);
+      seen.add(node.name);
+      for (const def of variable.defs) {
+        if (def.node.type !== "VariableDeclarator") continue;
+        if (def.node.init && isGlobalObjectReference(def.node.init, seen)) return true;
+      }
+      // `let G2; G2 = globalThis` is the same alias as `const G2 = globalThis`.
+      for (const reference of variable.references) {
+        if (reference.writeExpr && isGlobalObjectReference(reference.writeExpr, seen)) return true;
+      }
       return false;
+    }
+
+    function destructureSource(pattern) {
+      let current = pattern;
+      while (current?.parent) {
+        const parent = current.parent;
+        if (parent.type === "VariableDeclarator" && parent.id === current) return parent.init ?? null;
+        if (parent.type === "AssignmentExpression" && parent.left === current) return parent.right;
+        if (parent.type === "Property" && parent.value === current && parent.parent?.type === "ObjectPattern") {
+          current = parent.parent;
+          continue;
+        }
+        if (parent.type === "AssignmentPattern" && parent.left === current) {
+          current = parent.parent;
+          continue;
+        }
+        return null;
+      }
+      return null;
+    }
+
+    function isGlobalDestructuredDate(node) {
+      const property = node.parent;
+      if (!property || property.type !== "Property" || property.key !== node || property.computed) return false;
+      if (property.parent?.type !== "ObjectPattern") return false;
+      return isGlobalObjectReference(destructureSource(property.parent));
+    }
+
+    function isUtcOrParse(member) {
+      return (
+        !member.computed &&
+        member.property.type === "Identifier" &&
+        (member.property.name === "UTC" || member.property.name === "parse")
+      );
+    }
+
+    function isGlobalDate(node) {
+      if (!node || node.type !== "MemberExpression") return false;
+      if (!isGlobalObjectReference(node.object)) return false;
+      return isDateProperty(node);
+    }
+
+    function isDateAlias(name, node, seen = new Set()) {
+      if (seen.has(name)) return false;
+      const variable = findVariable(name, node);
+      if (!variable) return false;
+      seen.add(name);
+      return variable.defs.some((def) => {
+        if (def.node.type !== "VariableDeclarator") return false;
+        const init = def.node.init;
+        if (!init) return false;
+        if (init.type === "Identifier") {
+          if (init.name === "Date") return true;
+          return isDateAlias(init.name, init, seen);
+        }
+        return isGlobalDate(init);
+      });
     }
 
     function isDateValue(node) {
@@ -74,21 +167,26 @@ const noWallClock = {
       );
     }
 
+    // Date.now() is reported by CallExpression. Other uses of the member are not calls.
+    function isDirectNowCall(member) {
+      const parent = member.parent;
+      return parent?.type === "CallExpression" && parent.callee === member;
+    }
+
+    function globalDateLabel(node) {
+      return node.object.type === "Identifier" ? `${node.object.name}.Date` : "Date";
+    }
+
     return {
       Identifier(node) {
         if (node.name !== "Date" || isTypePosition(node)) return;
         const parent = node.parent;
         if (parent?.type === "MemberExpression" && parent.property === node) return;
+        if (isNonValueDate(node) && !isGlobalDestructuredDate(node)) return;
         if (allowedClockMember(node)) return;
         if (parent?.type === "NewExpression" && parent.callee === node) return;
-        if (
-          parent?.type === "MemberExpression" &&
-          parent.object === node &&
-          !parent.computed &&
-          parent.property.type === "Identifier" &&
-          parent.property.name === "now"
-        ) {
-          return;
+        if (parent?.type === "MemberExpression" && parent.object === node && isNowProperty(parent)) {
+          if (isDirectNowCall(parent)) return;
         }
         report(node, "Date");
       },
@@ -103,8 +201,15 @@ const noWallClock = {
         report(node, "new Date");
       },
       MemberExpression(node) {
-        if (!isGlobalDate(node)) return;
-        report(node, `${node.object.name}.Date`);
+        if (!isGlobalDate(node) || isInstanceType(node)) return;
+        const parent = node.parent;
+        if (parent?.type === "NewExpression" && parent.callee === node) return;
+        if (parent?.type === "CallExpression" && parent.callee === node) return;
+        if (parent?.type === "MemberExpression" && parent.object === node && isNowProperty(parent)) {
+          if (isDirectNowCall(parent)) return;
+        }
+        if (parent?.type === "MemberExpression" && parent.object === node && isUtcOrParse(parent)) return;
+        report(node, globalDateLabel(node));
       },
     };
   },

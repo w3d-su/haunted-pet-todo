@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, type KeyboardEvent } from "react";
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { PixelButton } from "@/components/ui/PixelButton";
 import { SubtaskList } from "@/components/tasks/SubtaskList";
 import type { TaskView } from "@/components/tasks/TaskList";
+import { nextMoveButtonFocus, type MoveButton } from "@/components/tasks/order";
 
 const badge: Record<TaskView["status"], string> = {
   todo: "text-ghost-dim",
@@ -34,6 +35,38 @@ export function TaskItem({
   const reduced = useReducedMotion() === true;
   const [flash, setFlash] = useState(false);
   const done = task.status === "done";
+  const upRef = useRef<HTMLButtonElement>(null);
+  const downRef = useRef<HTMLButtonElement>(null);
+  const focusedMove = useRef<MoveButton | null>(null);
+  const hadUp = useRef(false);
+  const hadDown = useRef(false);
+  const hasUp = onMoveUp !== undefined;
+  const hasDown = onMoveDown !== undefined;
+
+  useLayoutEffect(() => {
+    const next = nextMoveButtonFocus(focusedMove.current, hadUp.current, hasUp, hadDown.current, hasDown);
+    const target = next === "up" ? upRef.current : next === "down" ? downRef.current : null;
+    if (next && target) {
+      target.focus();
+      focusedMove.current = next;
+    }
+    hadUp.current = hasUp;
+    hadDown.current = hasDown;
+  }, [hasUp, hasDown]);
+
+  function rememberMove(which: MoveButton) {
+    focusedMove.current = which;
+  }
+
+  function forgetMove(which: MoveButton) {
+    // Blur from unmount runs before the layout effect. Clearing now would drop the button it replaces.
+    queueMicrotask(() => {
+      if (focusedMove.current !== which) return;
+      const button = which === "up" ? upRef.current : downRef.current;
+      if (!button?.isConnected) return;
+      if (document.activeElement !== button) focusedMove.current = null;
+    });
+  }
 
   function onKeyDown(event: KeyboardEvent<HTMLLIElement>) {
     if (pending) return;
@@ -76,10 +109,14 @@ export function TaskItem({
         <div className="flex flex-wrap justify-end gap-2">
           {onMoveUp ? (
             <PixelButton
+              ref={upRef}
               aria-disabled={pending || undefined}
               aria-label={`Up, move ${task.title}`}
               className={pending ? "border-ghost-dim text-ghost-dim" : ""}
+              onFocus={() => rememberMove("up")}
+              onBlur={() => forgetMove("up")}
               onClick={() => {
+                rememberMove("up");
                 if (!pending) onMoveUp();
               }}
             >
@@ -88,10 +125,14 @@ export function TaskItem({
           ) : null}
           {onMoveDown ? (
             <PixelButton
+              ref={downRef}
               aria-disabled={pending || undefined}
               aria-label={`Down, move ${task.title}`}
               className={pending ? "border-ghost-dim text-ghost-dim" : ""}
+              onFocus={() => rememberMove("down")}
+              onBlur={() => forgetMove("down")}
               onClick={() => {
+                rememberMove("down");
                 if (!pending) onMoveDown();
               }}
             >
@@ -100,9 +141,11 @@ export function TaskItem({
           ) : null}
           {done ? null : (
             <PixelButton
-              disabled={pending}
+              aria-disabled={pending || undefined}
               aria-label={`Complete ${task.title}`}
+              className={pending ? "border-ghost-dim text-ghost-dim" : ""}
               onClick={() => {
+                if (pending) return;
                 setFlash(true);
                 window.setTimeout(() => setFlash(false), reduced ? 0 : 160);
                 onComplete(task.id);
