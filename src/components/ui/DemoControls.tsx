@@ -105,7 +105,7 @@ export function DemoControls({
         })}
       </div>
       {error ? (
-        <p className="mt-2 text-[8px] leading-relaxed text-blood">{t.demo.refused}</p>
+        <p className="mt-2 text-[8px] leading-relaxed text-blood-text">{t.demo.refused}</p>
       ) : null}
     </motion.section>
   );

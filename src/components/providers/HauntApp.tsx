@@ -49,7 +49,7 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
           <p className="mt-6 text-[10px] leading-relaxed text-ghost-dim">{t.app.listening}</p>
         ) : null}
         {game.error ? (
-          <p className="mt-4 text-[10px] leading-relaxed text-blood" role="alert">
+          <p className="mt-4 text-[10px] leading-relaxed text-blood-text" role="alert">
             {t.app.error(translateError(game.error, t))}
           </p>
         ) : null}

@@ -134,7 +134,7 @@ export function TaskForm({
         />
         {t.form.alreadyLate}
       </label>
-      {error ? <p className="text-[8px] leading-relaxed text-blood">{translateError(error, t)}</p> : null}
+      {error ? <p className="text-[8px] leading-relaxed text-blood-text">{translateError(error, t)}</p> : null}
       <PixelButton type="submit" disabled={pending}>
         {t.form.add}
       </PixelButton>
