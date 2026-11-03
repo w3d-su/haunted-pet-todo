@@ -11,7 +11,7 @@
   --color-pumpkin-dark: #a34f00;
   --color-slime: #4caf50;
   --color-slime-dark: #2e7d32;
-  --color-blood: #c0392b;
+  --color-blood: #e74c3c;
   --color-blood-dark: #922b21;
   --color-mood-purple: #9b59b6;
   --color-bone: #f5e6c8;
@@ -97,7 +97,7 @@ span.w-8 {
   width: 3.5em;
 }
 
-/* The native date control is wider than the card at 17.5px. 14px still clears the minimum and keeps the full placeholder plus the picker icon inside the field. */
+/* The native date control is wider than the card at 17.5px. 14px still clears the minimum and keeps the full placeholder plus the picker icon inside the field. Below 359px the pixel font still overflows that field, so this one control uses a narrower face. */
 @media (max-width: 1023px) {
   input[type="datetime-local"],
   html[lang="zh-Hant-TW"] input[type="datetime-local"],
@@ -109,6 +109,13 @@ span.w-8 {
   input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     margin: 0;
     padding: 0;
+  }
+}
+
+@media (max-width: 358px) {
+  input[type="datetime-local"] {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0;
   }
 }
 
