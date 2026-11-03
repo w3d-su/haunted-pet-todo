@@ -37,25 +37,25 @@ it("epitaph bone text on the void shade passes WCAG AA", () => {
 });
 
 it("sprites name the pet, the tombstone, and the zombie", () => {
-  const sprite = readFileSync("src/components/pet/PetSprite.tsx", "utf8");
-  expect(sprite).toContain("Ghost pet egg");
-  expect(sprite).toContain("Ghost pet — hatchling stage");
-  expect(sprite).toContain("stage, hungry");
-  expect(readFileSync("src/components/pet/EggHatch.tsx", "utf8")).toContain(
-    'alt="Ghost pet egg hatching"',
-  );
-  expect(readFileSync("src/components/pet/Tombstone.tsx", "utf8")).toContain(
-    'alt="Tombstone for a ghost pet"',
-  );
+  const copy = readFileSync("src/lib/i18n/en.ts", "utf8");
+  expect(copy).toContain("Ghost pet egg");
+  expect(copy).toContain("Ghost pet — hatchling stage");
+  expect(copy).toContain("stage, hungry");
+  expect(copy).toContain("Ghost pet egg hatching");
+  expect(copy).toContain("Tombstone for a ghost pet");
+  expect(copy).toContain("Zombie haunting an overdue task");
+  expect(readFileSync("src/components/pet/PetSprite.tsx", "utf8")).toContain("alt: t.sprite.egg");
+  expect(readFileSync("src/components/pet/EggHatch.tsx", "utf8")).toContain("alt={t.sprite.hatching}");
+  expect(readFileSync("src/components/pet/Tombstone.tsx", "utf8")).toContain("alt={t.tombstone.alt}");
   expect(readFileSync("src/components/zombies/ZombieSprite.tsx", "utf8")).toContain(
-    'alt="Zombie haunting an overdue task"',
+    "alt={t.sprite.zombie}",
   );
 });
 
 it("task controls expose a name, a text status, and labels", () => {
   const item = readFileSync("src/components/tasks/TaskItem.tsx", "utf8");
-  expect(item).toContain("aria-label={`Complete ${task.title}`}");
-  expect(item).toContain("{task.status}");
+  expect(item).toContain("aria-label={t.task.complete(task.title)}");
+  expect(item).toContain("{t.status[task.status]}");
   const form = readFileSync("src/components/tasks/TaskForm.tsx", "utf8");
   for (const id of ["task-title", "task-category", "task-size", "task-due", "task-late"]) {
     expect(form).toContain(`htmlFor="${id}"`);

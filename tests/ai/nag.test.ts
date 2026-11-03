@@ -29,6 +29,10 @@ it("keeps every nag under 140 characters and names the task when haunting", () =
     expect(line.length).toBeGreaterThan(0);
   }
   expect(buildNagPrompt({ stage: "adult" }, tasks, "haunting")).toContain("Finish the report");
+  expect(buildNagPrompt({ stage: "adult" }, tasks, "haunting", "zh-TW")).toContain("Finish the report");
+  expect(buildNagPrompt({ stage: "hatchling" }, tasks, "gentle", "zh-TW")).not.toBe(
+    buildNagPrompt({ stage: "hatchling" }, tasks, "gentle"),
+  );
   const noisy = buildNagPrompt(
     { stage: "adult" },
     [{ ...overdue(8), title: 'Say "boo"\nand leave' }],

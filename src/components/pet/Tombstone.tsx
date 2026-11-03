@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { FALLBACK_EPITAPH } from "@/lib/game/pet";
+import { useLocale } from "@/components/providers/LocaleProvider";
+import { epitaphForDisplay } from "@/lib/i18n/dictionaries";
 import { PixelButton } from "@/components/ui/PixelButton";
 
 export function Tombstone({
@@ -15,8 +16,9 @@ export function Tombstone({
   pending: boolean;
 }) {
   const reduced = useReducedMotion() === true;
+  const { t } = useLocale();
   const [ready, setReady] = useState(reduced);
-  const text = epitaph && epitaph.trim().length > 0 ? epitaph : FALLBACK_EPITAPH;
+  const text = epitaphForDisplay(epitaph, t);
 
   useEffect(() => {
     if (reduced) {
@@ -31,7 +33,7 @@ export function Tombstone({
     <motion.div
       className="tombstone-shade fixed inset-0 z-[45] flex flex-col items-center justify-center px-4"
       role="dialog"
-      aria-label="Pet tombstone"
+      aria-label={t.tombstone.dialog}
       initial={reduced ? false : { opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={reduced ? { duration: 0 } : { type: "tween", duration: 0.3, ease: "easeOut" }}
@@ -42,7 +44,7 @@ export function Tombstone({
         <img
           className="pixel-art h-32 w-24"
           src="/sprites/tombstone.png"
-          alt="Tombstone for a ghost pet"
+          alt={t.tombstone.alt}
         />
       </div>
       <p className="mt-4 max-w-xs whitespace-pre-line text-center text-[8px] leading-relaxed text-bone">
@@ -50,10 +52,10 @@ export function Tombstone({
       </p>
       {ready ? (
         <PixelButton className="mt-6" disabled={pending} onClick={onRebirth}>
-          New Egg
+          {t.tombstone.newEgg}
         </PixelButton>
       ) : (
-        <p className="mt-6 text-[8px] leading-relaxed text-ghost-dim">The stone is settling…</p>
+        <p className="mt-6 text-[8px] leading-relaxed text-ghost-dim">{t.tombstone.settling}</p>
       )}
     </motion.div>
   );

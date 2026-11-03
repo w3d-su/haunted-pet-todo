@@ -2,13 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { PixelButton } from "@/components/ui/PixelButton";
 
-const ACTIONS = [
-  { key: "1", label: "+1h", name: "+1h, advance time by 1 hour", body: { hours: 1 } },
-  { key: "6", label: "+6h", name: "+6h, advance time by 6 hours", body: { hours: 6 } },
-  { key: "24", label: "+24h", name: "+24h, advance time by 24 hours", body: { hours: 24 } },
-  { key: "reset", label: "Reset", name: "Reset the demo clock", body: { reset: true } },
+const ACTION_BODIES = [
+  { key: "1", body: { hours: 1 } },
+  { key: "6", body: { hours: 6 } },
+  { key: "24", body: { hours: 24 } },
+  { key: "reset", body: { reset: true } },
 ] as const;
 
 export function DemoControls({
@@ -19,6 +20,7 @@ export function DemoControls({
   onRefresh: () => Promise<void>;
 }) {
   const reduced = useReducedMotion() === true;
+  const { t } = useLocale();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -32,9 +34,8 @@ export function DemoControls({
     }
     if (seenOffset.current === clockOffsetMs) return;
     seenOffset.current = clockOffsetMs;
-    const unit = Math.abs(hours) === 1 ? "hour" : "hours";
-    setAnnouncement(`Demo clock offset is ${hours} ${unit}`);
-  }, [clockOffsetMs, hours]);
+    setAnnouncement(t.demo.announcement(hours));
+  }, [clockOffsetMs, hours, t]);
 
   async function go(key: string, body: { hours: 1 | 6 | 24 } | { reset: true }) {
     setPending(key);
@@ -47,12 +48,12 @@ export function DemoControls({
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        setError("The clock refused to move.");
+        setError("refused");
         return;
       }
       await onRefresh();
     } catch {
-      setError("The clock refused to move.");
+      setError("refused");
     } finally {
       setPending(null);
     }
@@ -60,32 +61,52 @@ export function DemoControls({
 
   return (
     <motion.section
-      aria-label="Demo clock"
+      aria-label={t.demo.label}
       className="mt-6 border-2 border-ghost-dim bg-bg-panel-raised p-3"
       initial={reduced ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={reduced ? { duration: 0 } : { type: "tween", duration: 0.15, ease: "easeOut" }}
     >
-      <p className="text-[8px] leading-relaxed text-ghost-dim">Demo clock</p>
+      <p className="text-[8px] leading-relaxed text-ghost-dim">{t.demo.label}</p>
       <p className="mt-2 text-[10px] leading-relaxed text-ghost-white">
-        {pending ? "The spirit is listening…" : `Clock +${hours}h`}
+        {pending ? t.app.listening : t.demo.offset(hours)}
       </p>
       <p className="visually-hidden" aria-live="polite">
         {announcement}
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        {ACTIONS.map((action) => (
-          <PixelButton
-            key={action.key}
-            disabled={pending !== null}
-            aria-label={action.name}
-            onClick={() => void go(action.key, action.body)}
-          >
-            {action.label}
-          </PixelButton>
-        ))}
+        {ACTION_BODIES.map((action) => {
+          const label =
+            action.key === "1"
+              ? t.demo.plus1
+              : action.key === "6"
+                ? t.demo.plus6
+                : action.key === "24"
+                  ? t.demo.plus24
+                  : t.demo.reset;
+          const name =
+            action.key === "1"
+              ? t.demo.plus1Name
+              : action.key === "6"
+                ? t.demo.plus6Name
+                : action.key === "24"
+                  ? t.demo.plus24Name
+                  : t.demo.resetName;
+          return (
+            <PixelButton
+              key={action.key}
+              disabled={pending !== null}
+              aria-label={name}
+              onClick={() => void go(action.key, action.body)}
+            >
+              {label}
+            </PixelButton>
+          );
+        })}
       </div>
-      {error ? <p className="mt-2 text-[8px] leading-relaxed text-blood">{error}</p> : null}
+      {error ? (
+        <p className="mt-2 text-[8px] leading-relaxed text-blood">{t.demo.refused}</p>
+      ) : null}
     </motion.section>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 const FRAMES = [
   "/sprites/zombie_walk_0.png",
@@ -23,6 +24,7 @@ export function ZombieSprite({
   dissolving: boolean;
 }) {
   const reduced = useReducedMotion() === true;
+  const { t } = useLocale();
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function ZombieSprite({
       <img
         className={`pixel-art h-12 w-12 ${reduced ? "" : "zombie-march"}`}
         src={FRAMES[frame]}
-        alt="Zombie haunting an overdue task"
+        alt={t.sprite.zombie}
         data-task-id={taskId}
       />
     </motion.div>

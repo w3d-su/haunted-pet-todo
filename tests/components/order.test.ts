@@ -30,16 +30,16 @@ it("keeps move buttons focusable and ignores Alt+Arrow while a save is pending",
   const source = readFileSync("src/components/tasks/TaskItem.tsx", "utf8");
   expect(source).toContain("if (pending) return");
   expect(source).toContain("aria-disabled={pending || undefined}");
-  expect(source).not.toMatch(/aria-label=\{`Up, move \$\{task\.title\}`\}[\s\S]{0,80}disabled=\{pending\}/);
-  expect(source).not.toMatch(/aria-label=\{`Down, move \$\{task\.title\}`\}[\s\S]{0,80}disabled=\{pending\}/);
+  expect(source).not.toMatch(/aria-label=\{t\.task\.moveUp\(task\.title\)\}[\s\S]{0,80}disabled=\{pending\}/);
+  expect(source).not.toMatch(/aria-label=\{t\.task\.moveDown\(task\.title\)\}[\s\S]{0,80}disabled=\{pending\}/);
 });
 
 it("keeps Done focusable and ignores the click while a save is pending", () => {
   const source = readFileSync("src/components/tasks/TaskItem.tsx", "utf8");
   expect(source).toContain("aria-disabled={pending || undefined}");
-  expect(source).toContain("aria-label={`Complete ${task.title}`}");
-  expect(source).toMatch(/aria-label=\{`Complete \$\{task\.title\}`\}[\s\S]*if \(pending\) return;/);
-  expect(source).not.toMatch(/Complete \$\{task\.title\}`[\s\S]{0,240}disabled=\{pending\}/);
+  expect(source).toContain("aria-label={t.task.complete(task.title)}");
+  expect(source).toMatch(/aria-label=\{t\.task\.complete\(task\.title\)\}[\s\S]*if \(pending\) return;/);
+  expect(source).not.toMatch(/t\.task\.complete\(task\.title\)[\s\S]{0,240}disabled=\{pending\}/);
 });
 
 it("moves focus to the other move button when the focused end disappears", () => {

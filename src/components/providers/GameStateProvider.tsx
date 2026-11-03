@@ -1,7 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { useSound } from "@/components/providers/SoundProvider";
+import { en } from "@/lib/i18n/en";
 import { hpSpent, type PetState } from "@/lib/game/pet";
 import type { TaskView } from "@/components/tasks/TaskList";
 import { breakdownFailureIsQuiet } from "@/components/tasks/breakdown-ui";
@@ -87,7 +89,7 @@ async function bearerFromSupabase(): Promise<Record<string, string>> {
     const signed = await supabase.auth.signInAnonymously();
     token = signed.data.session?.access_token;
     if (signed.error || !token) {
-      throw new Error(signed.error?.message ?? "Sign-in failed. Try again.");
+      throw new Error(signed.error?.message ?? en.errors.signInFailed);
     }
   }
   return { Authorization: `Bearer ${token}` };
@@ -101,6 +103,9 @@ export function GameStateProvider({
   children: ReactNode;
 }) {
   const { play } = useSound();
+  const { locale } = useLocale();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const [pet, setPet] = useState<PetState | null>(null);
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [now, setNow] = useState(0);
@@ -118,6 +123,7 @@ export function GameStateProvider({
     for (const [key, value] of Object.entries(headersRef.current)) headers.set(key, value);
     if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
     headers.set("x-time-zone", Intl.DateTimeFormat().resolvedOptions().timeZone);
+    headers.set("x-locale", localeRef.current);
     return fetch(path, { ...init, headers, credentials: "same-origin" });
   }
 
@@ -127,7 +133,7 @@ export function GameStateProvider({
       authed("/api/tasks"),
     ]);
     if (!petResponse.ok || !taskResponse.ok) {
-      throw new Error("The house is dark. Try again.");
+      throw new Error(en.errors.houseDarkRetry);
     }
     const petBody = (await petResponse.json()) as {
       pet: PetState;
@@ -177,12 +183,12 @@ export function GameStateProvider({
             method: "POST",
             credentials: "same-origin",
           });
-          if (!session.ok) throw new Error(await failureMessage(session, "Demo mode is locked."));
+          if (!session.ok) throw new Error(await failureMessage(session, en.errors.demoLocked));
         }
         if (!cancelled) await refresh();
         if (!cancelled) setError(null);
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "The house is dark.");
+        if (!cancelled) setError(cause instanceof Error ? cause.message : en.errors.houseDark);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -216,7 +222,7 @@ export function GameStateProvider({
         if (cancelled) return;
         await authed("/api/push", {
           method: "POST",
-          body: JSON.stringify(subscription),
+          body: JSON.stringify({ ...subscription.toJSON(), locale: localeRef.current }),
         });
       } catch (cause) {
         console.error(cause);
@@ -232,13 +238,37 @@ export function GameStateProvider({
     };
   }, [loading, error]);
 
+  useEffect(() => {
+    if (loading || error) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator)) return;
+    let cancelled = false;
+    async function syncPushLocale() {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (cancelled || !subscription) return;
+        await authed("/api/push", {
+          method: "POST",
+          body: JSON.stringify({ ...subscription.toJSON(), locale }),
+        });
+      } catch (cause) {
+        console.error(cause);
+      }
+    }
+    void syncPushLocale();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, loading, error]);
+
   async function run(action: () => Promise<void>) {
     setPending(true);
     setError(null);
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something rustled and failed.");
+      setError(cause instanceof Error ? cause.message : en.errors.rustled);
     } finally {
       setPending(false);
     }
@@ -262,7 +292,7 @@ export function GameStateProvider({
           body: JSON.stringify(draft),
         });
         if (!response.ok) {
-          throw new Error(await failureMessage(response, "The task slipped through the floorboards."));
+          throw new Error(await failureMessage(response, en.errors.taskSlipped));
         }
         await refresh();
       }),
@@ -273,7 +303,7 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ id, status: "done" }),
         });
-        if (!response.ok) throw new Error(await failureMessage(response, "That task would not close."));
+        if (!response.ok) throw new Error(await failureMessage(response, en.errors.taskWouldNotClose));
         play("task_complete");
         const body = (await response.json()) as { emitted?: { type: string }[]; pet?: PetState };
         if (!body.pet || !hpSpent(body.pet.hp)) noticeEvolution(body.emitted);
@@ -293,7 +323,7 @@ export function GameStateProvider({
             method: "PATCH",
             body: JSON.stringify({ id, sortOrder }),
           });
-          if (!response.ok) throw new Error(await failureMessage(response, "The list would not shuffle."));
+          if (!response.ok) throw new Error(await failureMessage(response, en.errors.listWouldNotShuffle));
         }
         if (changed) await refresh();
       }),
@@ -303,7 +333,7 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ type: "REBIRTH" }),
         });
-        if (!response.ok) throw new Error(await failureMessage(response, "The egg is not ready."));
+        if (!response.ok) throw new Error(await failureMessage(response, en.errors.eggNotReady));
         await refresh();
       }),
     requestBreakdown: (id) =>
@@ -318,10 +348,10 @@ export function GameStateProvider({
             await refresh();
             return;
           }
-          throw new Error(message || "The ghost could not break that down.");
+          throw new Error(message || en.errors.ghostCouldNotBreak);
         }
         if (!response.ok) {
-          throw new Error(await failureMessage(response, "The ghost could not break that down."));
+          throw new Error(await failureMessage(response, en.errors.ghostCouldNotBreak));
         }
         const body = (await response.json()) as { intro?: string };
         await refresh();

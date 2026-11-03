@@ -2,17 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useLocale } from "@/components/providers/LocaleProvider";
+import type { Dictionary } from "@/lib/i18n/en";
+import type { Locale } from "@/lib/i18n/locale";
 import type { PetState } from "@/lib/game/pet";
 
-function spriteFor(pet: PetState): { src: string; size: string; alt: string } {
+function spriteFor(
+  pet: PetState,
+  t: Dictionary,
+  locale: Locale,
+): { src: string; size: string; alt: string } {
   if (pet.stage === "egg") {
-    return { src: "/sprites/egg_idle.png", size: "h-16 w-16", alt: "Ghost pet egg" };
+    return { src: "/sprites/egg_idle.png", size: "h-16 w-16", alt: t.sprite.egg };
   }
   if (pet.stage === "hatchling") {
     return {
       src: "/sprites/hatchling_idle.png",
       size: "h-16 w-16",
-      alt: "Ghost pet — hatchling stage",
+      alt: t.sprite.hatchling,
     };
   }
   const hungry = pet.stage === "adult" && pet.hunger < 30;
@@ -22,17 +29,18 @@ function spriteFor(pet: PetState): { src: string; size: string; alt: string } {
         ? "adult_hungry.png"
         : "adult_idle.png"
       : `${pet.stage}_idle.png`;
-  const label = pet.stage.replaceAll("_", " ");
+  const label = locale === "en" ? pet.stage.replaceAll("_", " ") : t.stage[pet.stage];
   return {
     src: `/sprites/${file}`,
     size: "h-24 w-24",
-    alt: hungry ? `Ghost pet — ${label} stage, hungry` : `Ghost pet — ${label} stage`,
+    alt: hungry ? t.sprite.hungry(label) : t.sprite.stage(label),
   };
 }
 
 export function PetSprite({ pet, evolving = false }: { pet: PetState; evolving?: boolean }) {
   const reduced = useReducedMotion() === true;
-  const sprite = spriteFor(pet);
+  const { locale, t } = useLocale();
+  const sprite = spriteFor(pet, t, locale);
   const previousHp = useRef(pet.hp);
   const [hurt, setHurt] = useState(false);
 

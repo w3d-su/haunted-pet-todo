@@ -33,6 +33,9 @@ body {
   background: var(--color-bg-void);
   color: var(--color-ghost-white);
   line-height: 1.625;
+  /* Press Start 2P has no CJK glyphs. Chinese falls through to a system face. */
+  font-family: var(--font-press-start), "PingFang TC", "Noto Sans TC", "Noto Sans CJK TC",
+    "Microsoft JhengHei", sans-serif;
 }
 
 .pixel-art {
@@ -51,6 +54,22 @@ body {
 
 .text-\[16px\] {
   font-size: calc(16px * var(--pixel-scale));
+}
+
+/* CJK fallbacks are proportional. Keep them at least as large as 14px. */
+html[lang="zh-Hant-TW"] .text-\[8px\],
+html[lang="zh-TW"] .text-\[8px\] {
+  font-size: max(14px, calc(8px * var(--pixel-scale)));
+}
+
+html[lang="zh-Hant-TW"] .text-\[10px\],
+html[lang="zh-TW"] .text-\[10px\] {
+  font-size: max(14px, calc(10px * var(--pixel-scale)));
+}
+
+html[lang="zh-Hant-TW"] .text-\[16px\],
+html[lang="zh-TW"] .text-\[16px\] {
+  font-size: max(14px, calc(16px * var(--pixel-scale)));
 }
 
 /* Integer display size: source pixels × --pet-scale. 7× below desktop, 8× at 1024+. */
@@ -80,7 +99,9 @@ span.w-8 {
 
 /* The native date control is wider than the card at 17.5px. 14px still clears the minimum and keeps the full placeholder plus the picker icon inside the field. */
 @media (max-width: 1023px) {
-  input[type="datetime-local"] {
+  input[type="datetime-local"],
+  html[lang="zh-Hant-TW"] input[type="datetime-local"],
+  html[lang="zh-TW"] input[type="datetime-local"] {
     font-size: 14px;
     padding-inline: 4px;
   }

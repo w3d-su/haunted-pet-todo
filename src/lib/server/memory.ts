@@ -159,7 +159,12 @@ export function createMemoryWorld(): MemoryWorld {
     async list(userId) {
       return pushes
         .filter((row) => row.userId === userId)
-        .map((row) => ({ endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth }));
+        .map((row) => ({
+          endpoint: row.endpoint,
+          p256dh: row.p256dh,
+          auth: row.auth,
+          locale: row.locale === "zh-TW" ? ("zh-TW" as const) : ("en" as const),
+        }));
     },
     async upsert(userId, subscription) {
       const index = pushes.findIndex(

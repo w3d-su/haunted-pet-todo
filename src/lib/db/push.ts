@@ -8,6 +8,7 @@ const PushRowSchema = z.object({
   endpoint: z.string().min(1),
   p256dh: z.string().min(1),
   auth: z.string().min(1),
+  locale: z.enum(["en", "zh-TW"]),
 });
 
 function throwOnError(error: { message: string } | null): void {
@@ -20,13 +21,18 @@ export async function listPushSubscriptions(
 ): Promise<PushSubscription[]> {
   const { data, error } = await supabase
     .from("push_subscriptions")
-    .select("user_id, endpoint, p256dh, auth")
+    .select("user_id, endpoint, p256dh, auth, locale")
     .eq("user_id", userId);
   throwOnError(error);
   return z
     .array(PushRowSchema)
     .parse(data ?? [])
-    .map((row) => ({ endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth }));
+    .map((row) => ({
+      endpoint: row.endpoint,
+      p256dh: row.p256dh,
+      auth: row.auth,
+      locale: row.locale,
+    }));
 }
 
 export async function upsertPushSubscription(
@@ -40,6 +46,7 @@ export async function upsertPushSubscription(
       endpoint: subscription.endpoint,
       p256dh: subscription.p256dh,
       auth: subscription.auth,
+      locale: subscription.locale === "zh-TW" ? "zh-TW" : "en",
     },
     { onConflict: "user_id,endpoint" },
   );

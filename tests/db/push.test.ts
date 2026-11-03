@@ -49,7 +49,7 @@ describeDb("postgres push subscriptions", () => {
     });
     const listed = await listPushSubscriptions(supabase, USER_ID);
     expect(listed).toEqual([
-      { endpoint: "https://push.example/haunt", p256dh: "second", auth: "auth" },
+      { endpoint: "https://push.example/haunt", p256dh: "second", auth: "auth", locale: "en" },
     ]);
     await deletePushSubscription(supabase, USER_ID, "https://push.example/haunt");
     expect(await listPushSubscriptions(supabase, USER_ID)).toEqual([]);

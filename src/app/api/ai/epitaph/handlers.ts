@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { resolveEpitaph } from "@/lib/ai/epitaph";
 import { completeJson } from "@/lib/ai/llm";
+import { localeFromHeader } from "@/lib/i18n/locale";
 import { applyPetEvent, FALLBACK_EPITAPH, hpSpent } from "@/lib/game/pet";
 import { serverEnv } from "@/lib/server/env";
 import {
@@ -54,6 +55,7 @@ export async function postEpitaph(request: Request, deps: EpitaphDeps): Promise<
       world.pet,
       world.tasks,
       allowed ? deps.completeJson : async () => null,
+      localeFromHeader(request.headers.get("x-locale")),
     );
     const reduction = applyPetEvent(
       world.pet,
