@@ -48,6 +48,8 @@ The SQL in `supabase/migrations/` is the schema (`tasks`, `events`, `pet_state`)
 2. Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Leave the service-role key out of the client. Do not commit `.env.local`.
 3. Enable **Anonymous sign-ins** in the dashboard (Authentication → Sign In / Providers). A SQL migration cannot toggle that Auth setting. For local `supabase start`, `supabase/config.toml` sets `enable_anonymous_sign_ins = true` (keep that flag if you regenerate the file with `supabase init`).
 4. Apply the migrations: `pnpm db:migrate` (`supabase db push`). `pnpm db:types` regenerates TypeScript types once the CLI is linked. `0005_nag_and_budget.sql` was edited in place after it first shipped. If a local database already applied an older copy of that file, run `supabase db reset` so the advisory lock and `search_path` on those functions are created again.
+
+**Apply `supabase/migrations/0006_push_locale.sql` to the production Supabase database before deploying this app.** That migration adds `push_subscriptions.locale`. The server can still store a subscription if the column is missing, but daily nag notifications stay in English until the migration has been applied. Do not deploy the Traditional Chinese push copy ahead of this migration.
 5. Sign in from the browser. Do not proxy this through the server: Supabase limits anonymous sign-ins per IP (30/hour), and a server route would spend that budget on Vercel's address. Turnstile or another captcha is the later hardening step; it is not wired up yet.
 
 ```ts

@@ -1,21 +1,30 @@
-/**
- * Simplified forms that are not the ordinary Traditional glyph.
- * Shared characters (的, 一, 是) are left out on purpose.
- */
-const SIMPLIFIED_ONLY = "这来时个对会说现发经还过问门东车长书买儿头体无开关电马国们为从实";
+import { Converter } from "opencc-js/cn2t";
 
 /**
- * True when the text is mostly Han and does not use simplified-only glyphs.
- * English fails the Han ratio. A Traditional line that quotes an English
- * task name still passes.
+ * OpenCC rewrites these Traditional glyphs to another Traditional form
+ * (台灣 → 臺灣, 公里 → 公裡). They are everyday Taiwan usage, not Simplified.
+ */
+const TRADITIONAL_VARIANTS = new Set(["台", "里", "后", "干", "裏"]);
+
+const toTraditional = Converter({ from: "cn", to: "tw" });
+
+/** A Han character OpenCC would rewrite, other than a Traditional variant. */
+function containsSimplified(text: string): boolean {
+  for (const glyph of text) {
+    if (TRADITIONAL_VARIANTS.has(glyph)) continue;
+    if (toTraditional(glyph) !== glyph) return true;
+  }
+  return false;
+}
+
+/**
+ * Traditional Chinese for model replies. ASCII words are removed first so a
+ * Traditional sentence that names "GitHub" is not rejected for its Latin
+ * ratio. Any Simplified character OpenCC knows still fails the check.
  */
 export function isTraditionalChinese(text: string): boolean {
-  const han = text.match(/\p{Script=Han}/gu)?.length ?? 0;
-  if (han === 0) return false;
-  const latin = text.match(/[A-Za-z]/g)?.length ?? 0;
-  if (han / (han + latin) < 0.4) return false;
-  for (const glyph of SIMPLIFIED_ONLY) {
-    if (text.includes(glyph)) return false;
-  }
-  return true;
+  const withoutAscii = text.replace(/[A-Za-z0-9]+/g, "");
+  const han = withoutAscii.match(/\p{Script=Han}/gu)?.length ?? 0;
+  if (han < 1) return false;
+  return !containsSimplified(text);
 }
