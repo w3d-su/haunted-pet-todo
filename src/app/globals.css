@@ -18,6 +18,14 @@
   --color-scanline: rgba(0, 0, 0, 0.18);
   --color-vignette-start: rgba(0, 0, 0, 0);
   --color-vignette-end: rgba(0, 0, 0, 0.72);
+  /* Pixel steps in the components are 8 / 10 / 16. Scale multiplies all of them. */
+  --font-base: 16px;
+  --pixel-scale: 1;
+  --pet-scale: 4;
+}
+
+html {
+  font-size: var(--font-base);
 }
 
 body {
@@ -27,8 +35,65 @@ body {
 }
 
 .pixel-art {
-  image-rendering: pixelated;
   image-rendering: crisp-edges;
+  image-rendering: pixelated;
+}
+
+/* Unlayered so these beat Tailwind's absolute px utilities. */
+.text-\[8px\] {
+  font-size: calc(8px * var(--pixel-scale));
+}
+
+.text-\[10px\] {
+  font-size: calc(10px * var(--pixel-scale));
+}
+
+.text-\[16px\] {
+  font-size: calc(16px * var(--pixel-scale));
+}
+
+/* Integer display size: source pixels × --pet-scale. 4× below desktop, 8× at 1024+. */
+.pixel-art.h-16.w-16 {
+  width: calc(16px * var(--pet-scale));
+  height: calc(16px * var(--pet-scale));
+}
+
+.pixel-art.h-24.w-24 {
+  width: calc(24px * var(--pet-scale));
+  height: calc(24px * var(--pet-scale));
+}
+
+.pixel-art.h-32.w-24 {
+  width: calc(24px * var(--pet-scale));
+  height: calc(32px * var(--pet-scale));
+}
+
+@media (min-width: 1024px) {
+  :root {
+    /* 20px base opens rem padding. Scale 2 makes the 8px labels render at 16px. */
+    --font-base: 20px;
+    --pixel-scale: 2;
+    --pet-scale: 8;
+  }
+
+  main section {
+    max-width: 640px;
+  }
+
+  /* Zombies stay 3× (48px). A 20px root would otherwise draw them at 60px. */
+  .pixel-art.h-12.w-12 {
+    width: 48px;
+    height: 48px;
+  }
+
+  /* Stat columns were fixed rem widths sized for 8px type. Track the scaled font. */
+  span.w-16 {
+    width: 6.5em;
+  }
+
+  span.w-8 {
+    width: 3.5em;
+  }
 }
 
 .visually-hidden {
