@@ -35,9 +35,13 @@ export default function RootLayout({
         </noscript>
         <LocaleProvider>
           <SoundProvider>
-            {children}
-            <LanguageSwitcher />
-            <MuteToggle />
+            <div className="flex min-h-screen flex-col">
+              <div className="relative z-[60] flex flex-wrap items-center justify-between gap-3 px-3 pt-3">
+                <LanguageSwitcher />
+                <MuteToggle />
+              </div>
+              <div className="flex flex-1 flex-col">{children}</div>
+            </div>
           </SoundProvider>
         </LocaleProvider>
         <CrtOverlay />

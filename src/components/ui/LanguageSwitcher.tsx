@@ -10,7 +10,7 @@ export function LanguageSwitcher() {
   const { locale, setLocale, t } = useLocale();
 
   return (
-    <div className="fixed left-3 top-3 z-[60] max-w-[calc(100vw-7.5rem)]">
+    <div className="max-w-full">
       <label className="visually-hidden" htmlFor="language">
         {t.locale.label}
       </label>

@@ -40,7 +40,7 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
   const line = pet ? petSpeech(pet, flattenTitles(game.tasks), game.now, locale) : null;
 
   return (
-    <main className="min-h-screen bg-bg-void px-4 py-8 text-ghost-white">
+    <main className="flex-1 bg-bg-void px-4 py-8 text-ghost-white">
       <ZombieLayer />
       <section className="mx-auto w-full max-w-xl border-2 border-ghost-white bg-bg-panel px-4 py-6">
         <p className="text-[10px] leading-relaxed text-pumpkin">{t.brand.kicker}</p>
