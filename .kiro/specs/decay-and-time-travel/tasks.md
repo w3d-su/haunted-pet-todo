@@ -54,7 +54,7 @@
 
 ## Week 2 (Nov 9–16): Cron Job, Fast-Forward API, DemoControls
 
-- [ ] 6. (Week 2) Implement Vercel Cron job handler `src/app/api/cron/decay/route.ts`
+- [x] 6. (Week 2) Implement Vercel Cron job handler `src/app/api/cron/decay/route.ts`
   - [x] 6.1 Add `Authorization: Bearer <CRON_SECRET>` verification (return 401 on failure). Compare with a constant-time hash, and reject an empty secret.
   - [x] 6.2 Fetch all users' `PetState` and `Task` lists via service role client
   - [x] 6.3 For each user: run the same catch-up as a read (`syncWorld` / `catchUp`), which marks newly overdue tasks and applies decay plus zombie drain
@@ -112,7 +112,7 @@
 
 - [x] 13. (Week 3) Add Supabase migration for `push_subscriptions` table
   - [x] 13.1 Add table DDL and a select-only RLS policy (`auth.uid() = user_id`) to `0004_push.sql`. `0003_events_seq.sql` already exists. Writes stay on the service role.
-    - Files: `supabase/migrations/0003_push.sql`
+    - Files: `supabase/migrations/0004_push.sql`
   _Requirements: 9.2, 9.3_
 
 - [x] 14. (Week 3) Add a once-a-day nag to the cron handler

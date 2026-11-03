@@ -84,7 +84,8 @@
   - [x] 10.2 `TaskItem.tsx`: show task title, status badge, complete button; strike-through + slime flash on completion
   - [x] 10.3 `TaskList.tsx`: fetch from `/api/tasks`, optimistic update on complete
   - [x] 10.4 `TaskList.tsx`: drag-to-reorder that calls PATCH `sortOrder`
-    - Files: `src/components/tasks/TaskList.tsx`, `src/components/tasks/TaskItem.tsx`, `src/components/tasks/TaskForm.tsx`
+  - [x] 10.5 Keyboard reorder: Up and Down buttons, and Alt+ArrowUp / Alt+ArrowDown, in `TaskItem.tsx`. Both paths use `reorderTask` in `src/components/tasks/order.ts` and then the same `sortOrder` PATCH. Covered by `tests/components/order.test.ts`.
+    - Files: `src/components/tasks/TaskList.tsx`, `src/components/tasks/TaskItem.tsx`, `src/components/tasks/TaskForm.tsx`, `src/components/tasks/order.ts`, `tests/components/order.test.ts`
   _Requirements: 1.1, 2.1, 7.1, 14.1, 14.2_
 
 - [x] 11. (Week 2) Implement zombie UI components

@@ -104,7 +104,8 @@
   - [x] 11b.1 Browser calls `supabase.auth.signInAnonymously()` with the anon key. Do not proxy it through a server route (Supabase's per-IP limit would stick to Vercel's IP)
   - [x] 11b.2 Local `supabase/config.toml` sets `enable_anonymous_sign_ins`. Hosted projects enable the same provider in the dashboard (Auth settings are not a SQL migration)
   - [x] 11b.3 README documents the browser sign-in, the bearer token, and `X-Time-Zone` on the first pet read only
-    - Files: `src/lib/db/auth.ts`, `src/app/api/auth/anonymous/route.ts`, `supabase/config.toml`, `README.md`
+    - Files: `src/lib/db/auth.ts`, `supabase/config.toml`, `README.md`
+  _Note: `src/app/api/auth/anonymous/route.ts` was never created. Sign-in is client-only in `GameStateProvider.tsx` (`supabase.auth.signInAnonymously()`). `src/lib/db/auth.ts` only resolves a bearer access token. The README documents the per-IP limit that a server route would hit._
   _Requirements: RLS needs `auth.uid()`; anonymous users are real `auth.users` rows_
 
 ## Week 2 (Nov 9–16): Pet API, Basic UI
