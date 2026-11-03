@@ -55,6 +55,7 @@ Use only these colors. Define them as Tailwind CSS custom properties in `tailwin
 
 - Line height for Press Start 2P: `leading-relaxed` (it needs room — the font has no descenders but feels cramped at tight leading).
 - Do not use any other fonts. No system fonts except as a fallback stack after Press Start 2P.
+- Exception: below 389px, `input[type="datetime-local"]` in `src/app/globals.css` uses `ui-sans-serif, system-ui, sans-serif` at 14px. Press Start 2P clips the AM/PM segment there and the picker icon overlaps the text. At 390px and wider the field returns to Press Start 2P. The visual-style check must not flag this rule.
 - Minimum rendered font size: 8px. Never smaller.
 - Text contrast: all text on dark backgrounds must pass WCAG AA (4.5:1). Ghost-white `#e8e0f0` on void `#0d0a1a` = ~14:1 ✅.
 

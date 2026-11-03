@@ -97,7 +97,7 @@ export function TaskItem({
         animate={{ opacity: flash && !reduced ? [0, 0.45, 0] : 0 }}
         transition={reduced ? { duration: 0 } : { type: "tween", duration: 0.15, ease: "easeOut" }}
       />
-      <div className="relative flex flex-col items-start gap-3 min-[390px]:flex-row min-[390px]:justify-between">
+      <div className="relative flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className={`text-[10px] leading-relaxed text-ghost-white [overflow-wrap:anywhere] ${done ? "line-through" : ""}`}>
             {task.title}
