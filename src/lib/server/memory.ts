@@ -4,6 +4,7 @@ import { clampFuturePetTimes, type PetState } from "@/lib/game/pet";
 import { clampFutureTaskTimes, type Task } from "@/lib/game/tasks";
 import { budgetDay, USER_AI_DAILY_CAP, siteAiDailyCap } from "@/lib/db/ai-budget";
 import { MAX_PUSH_SUBSCRIPTIONS } from "@/lib/push/endpoint";
+import { en } from "@/lib/i18n/en";
 import { PushCapError } from "@/lib/server/http";
 import type {
   AppDeps,
@@ -269,7 +270,7 @@ export function createMemoryWorld(): MemoryWorld {
                   const existing = pets.get(id);
                   if (!existing) return null;
                   if (!Number.isSafeInteger(shift.clockOffsetMs) || shift.clockOffsetMs < 0) {
-                    throw new Error("clock offset must be a non-negative integer");
+                    throw new Error(en.errors.clockOffset);
                   }
                   let state = existing.state;
                   if (shift.clampTo !== null) {

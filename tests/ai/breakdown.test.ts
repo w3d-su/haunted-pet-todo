@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { buildBreakdownPrompt, fallbackBreakdown } from "@/lib/ai/breakdown";
+import { buildBreakdownPrompt, fallbackBreakdown, resolveBreakdown } from "@/lib/ai/breakdown";
+import { zhTW } from "@/lib/i18n/zh-TW";
 import { BreakdownResponseSchema } from "@/lib/ai/schemas";
 import type { Task } from "@/lib/game/tasks";
 
@@ -55,6 +56,46 @@ it("rejects fewer than 3 or more than 7 subtasks", () => {
       subtasks: ["Open it", "Do the middle", "Check it"],
     }).success,
   ).toBe(false);
+});
+
+it("retries a non-traditional breakdown once, then uses the Chinese fallback", async () => {
+  let calls = 0;
+  const english = async () => {
+    calls += 1;
+    return {
+      intro: "Break this down",
+      subtasks: ["Open the draft", "Write the middle", "Check the end"],
+    };
+  };
+  const simplified = async () => {
+    calls += 1;
+    return {
+      intro: "这件很大",
+      subtasks: ["打开草稿", "写中间", "检查结尾"],
+    };
+  };
+  const englishResult = await resolveBreakdown(task(null), english, "zh-TW");
+  expect(calls).toBe(2);
+  expect(englishResult.source).toBe("fallback");
+  expect(englishResult.body.intro).toBe(zhTW.breakdown.intro);
+
+  calls = 0;
+  const simplifiedResult = await resolveBreakdown(task(null), simplified, "zh-TW");
+  expect(calls).toBe(2);
+  expect(simplifiedResult.source).toBe("fallback");
+
+  calls = 0;
+  const traditional = await resolveBreakdown(
+    task(null),
+    async () => {
+      calls += 1;
+      return { intro: "喔，這件很大", subtasks: ["打開草稿", "寫中間那段", "檢查結尾"] };
+    },
+    "zh-TW",
+  );
+  expect(calls).toBe(1);
+  expect(traditional.source).toBe("llm");
+  expect(traditional.body.intro).toBe("喔，這件很大");
 });
 
 it("builds a fallback the schema accepts", () => {

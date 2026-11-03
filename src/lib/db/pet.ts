@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { clampStoredTaskTimes } from "@/lib/db/tasks";
+import { en } from "@/lib/i18n/en";
 import {
   clampFuturePetTimes,
   PET_STAGES,
@@ -228,7 +229,7 @@ export async function setClockOffset(
   clampTo: number | null,
 ): Promise<PetRecord | null> {
   if (!Number.isSafeInteger(clockOffsetMs) || clockOffsetMs < 0) {
-    throw new Error("clock offset must be a non-negative integer");
+    throw new Error(en.errors.clockOffset);
   }
   const current = await getPetRecord(supabase, userId);
   if (!current) return null;

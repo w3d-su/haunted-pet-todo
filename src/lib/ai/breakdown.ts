@@ -2,6 +2,7 @@ import { BreakdownResponseSchema, type BreakdownResponse } from "@/lib/ai/schema
 import { plainLine, quoteForPrompt } from "@/lib/ai/text";
 import { dictionaryFor } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/locale";
+import { isTraditionalChinese } from "@/lib/i18n/traditional";
 import type { Task } from "@/lib/game/tasks";
 
 /**
@@ -42,12 +43,7 @@ export function fallbackBreakdown(
   });
 }
 
-export async function resolveBreakdown(
-  task: Pick<Task, "title" | "notes" | "category">,
-  completeJson: (prompt: string) => Promise<unknown | null>,
-  locale: Locale = "en",
-): Promise<{ body: BreakdownResponse; source: "llm" | "fallback" }> {
-  const raw = await completeJson(buildBreakdownPrompt(task, locale));
+function parseBreakdown(raw: unknown): BreakdownResponse | null {
   const record = raw !== null && typeof raw === "object" ? (raw as { intro?: unknown; subtasks?: unknown }) : null;
   const parsed = BreakdownResponseSchema.safeParse(
     record
@@ -59,6 +55,24 @@ export async function resolveBreakdown(
         }
       : raw,
   );
-  if (!parsed.success) return { body: fallbackBreakdown(task, locale), source: "fallback" };
-  return { body: parsed.data, source: "llm" };
+  return parsed.success ? parsed.data : null;
+}
+
+function breakdownIsTraditional(body: BreakdownResponse): boolean {
+  return isTraditionalChinese([body.intro, ...body.subtasks].join("\n"));
+}
+
+export async function resolveBreakdown(
+  task: Pick<Task, "title" | "notes" | "category">,
+  completeJson: (prompt: string) => Promise<unknown | null>,
+  locale: Locale = "en",
+): Promise<{ body: BreakdownResponse; source: "llm" | "fallback" }> {
+  const attempts = locale === "zh-TW" ? 2 : 1;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const body = parseBreakdown(await completeJson(buildBreakdownPrompt(task, locale)));
+    if (!body) continue;
+    if (locale === "zh-TW" && !breakdownIsTraditional(body)) continue;
+    return { body, source: "llm" };
+  }
+  return { body: fallbackBreakdown(task, locale), source: "fallback" };
 }

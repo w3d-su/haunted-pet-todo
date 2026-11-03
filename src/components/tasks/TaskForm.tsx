@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import { z } from "zod";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import { htmlLang } from "@/lib/i18n/locale";
 import { translateError } from "@/lib/i18n/dictionaries";
 import { en } from "@/lib/i18n/en";
 import { TASK_CATEGORIES, TASK_SIZES } from "@/lib/game/tasks";
@@ -42,7 +43,7 @@ export function TaskForm({
   const [due, setDue] = useState("");
   const [late, setLate] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -118,6 +119,7 @@ export function TaskForm({
       <input
         id="task-due"
         className={field}
+        lang={htmlLang(locale)}
         type="datetime-local"
         value={due}
         onChange={(event) => setDue(event.target.value)}

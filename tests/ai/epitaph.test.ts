@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { buildEpitaphPrompt, normalizeEpitaph, resolveEpitaph } from "@/lib/ai/epitaph";
+import { zhTW } from "@/lib/i18n/zh-TW";
 import { FALLBACK_EPITAPH, initialPetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 
@@ -69,4 +70,37 @@ it("uses the fixed epitaph when the model is missing or invalid", async () => {
   }));
   expect(links.epitaph).toBe("Here lies Spooky,\nsee and alert(1)");
   expect(links.epitaph).not.toMatch(/www\.|javascript:/);
+});
+
+it("retries a non-traditional epitaph once, then uses the Chinese fallback", async () => {
+  const pet = {
+    ...initialPetState("11111111-1111-4111-8111-111111111111", NOW, crypto.randomUUID(), "UTC"),
+    status: "dead" as const,
+  };
+  let calls = 0;
+  const english = await resolveEpitaph(
+    pet,
+    [],
+    async () => {
+      calls += 1;
+      return { epitaph: "Here lies Spooky,\nslain by dishes" };
+    },
+    "zh-TW",
+  );
+  expect(calls).toBe(2);
+  expect(english).toEqual({ epitaph: zhTW.epitaph.fallback, source: "fallback" });
+
+  calls = 0;
+  const carved = await resolveEpitaph(
+    pet,
+    [],
+    async () => {
+      calls += 1;
+      return { epitaph: "這裡躺著幽靈，\n敗給沒做完的事" };
+    },
+    "zh-TW",
+  );
+  expect(calls).toBe(1);
+  expect(carved.source).toBe("llm");
+  expect(carved.epitaph).toContain("這裡躺著幽靈");
 });

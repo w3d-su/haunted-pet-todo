@@ -196,6 +196,8 @@ export const en = {
     pushKeys: "Push keys are not valid",
     supabaseUrl: "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY. See README.",
     supabaseService: "Set SUPABASE_SERVICE_ROLE_KEY. See README.",
+    unexpectedPayload: "The save came back in a shape we did not expect.",
+    clockOffset: "The clock offset has to be a whole number, zero or more.",
   },
 } as const;
 

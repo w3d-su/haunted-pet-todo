@@ -2,6 +2,7 @@ import { EpitaphResponseSchema } from "@/lib/ai/schemas";
 import { plainEpitaph, quoteForPrompt } from "@/lib/ai/text";
 import { dictionaryFor } from "@/lib/i18n/dictionaries";
 import type { Locale } from "@/lib/i18n/locale";
+import { isTraditionalChinese } from "@/lib/i18n/traditional";
 import { FALLBACK_EPITAPH, type PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 
@@ -53,18 +54,19 @@ export async function resolveEpitaph(
   completeJson: (prompt: string) => Promise<unknown | null>,
   locale: Locale = "en",
 ): Promise<{ epitaph: string; source: "llm" | "fallback" }> {
-  const raw = await completeJson(buildEpitaphPrompt(pet, tasks, locale));
-  const epitaph =
-    raw !== null && typeof raw === "object" && "epitaph" in raw && typeof raw.epitaph === "string"
-      ? plainEpitaph(raw.epitaph)
-      : raw;
-  const parsed = EpitaphResponseSchema.safeParse(
-    epitaph === raw ? raw : { epitaph },
-  );
-  const text = parsed.success ? normalizeEpitaph(parsed.data.epitaph) : null;
-  if (!text) {
-    const fallback = locale === "zh-TW" ? dictionaryFor(locale).epitaph.fallback : FALLBACK_EPITAPH;
-    return { epitaph: fallback, source: "fallback" };
+  const attempts = locale === "zh-TW" ? 2 : 1;
+  const fallback = locale === "zh-TW" ? dictionaryFor(locale).epitaph.fallback : FALLBACK_EPITAPH;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const raw = await completeJson(buildEpitaphPrompt(pet, tasks, locale));
+    const epitaph =
+      raw !== null && typeof raw === "object" && "epitaph" in raw && typeof raw.epitaph === "string"
+        ? plainEpitaph(raw.epitaph)
+        : raw;
+    const parsed = EpitaphResponseSchema.safeParse(epitaph === raw ? raw : { epitaph });
+    const text = parsed.success ? normalizeEpitaph(parsed.data.epitaph) : null;
+    if (!text) continue;
+    if (locale === "zh-TW" && !isTraditionalChinese(text)) continue;
+    return { epitaph: text, source: "llm" };
   }
-  return { epitaph: text, source: "llm" };
+  return { epitaph: fallback, source: "fallback" };
 }

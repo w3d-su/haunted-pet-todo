@@ -3,6 +3,7 @@
  * Skips unless HAUNTED_TEST_DATABASE_URL names a database containing "test".
  */
 import { Pool } from "pg";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { takeAiBudget } from "@/lib/db/ai-budget";
 import { claimNagDay } from "@/lib/db/nag";
@@ -53,6 +54,26 @@ describeDb("postgres push subscriptions", () => {
     ]);
     await deletePushSubscription(supabase, USER_ID, "https://push.example/haunt");
     expect(await listPushSubscriptions(supabase, USER_ID)).toEqual([]);
+  });
+
+  it("stores zh-TW and rejects any other locale", async () => {
+    await pool.query("truncate public.push_subscriptions");
+    await upsertPushSubscription(supabase, USER_ID, {
+      endpoint: "https://push.example/zh",
+      p256dh: "k",
+      auth: "a",
+      locale: "zh-TW",
+    });
+    expect(await listPushSubscriptions(supabase, USER_ID)).toEqual([
+      { endpoint: "https://push.example/zh", p256dh: "k", auth: "a", locale: "zh-TW" },
+    ]);
+    await expect(
+      pool.query(
+        `insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, locale)
+         values ($1, 'https://push.example/bad', 'k', 'a', 'zh-CN')`,
+        [USER_ID],
+      ),
+    ).rejects.toThrow(/check constraint/i);
   });
 
   it("refuses a sixth subscription and counts model calls once", async () => {
@@ -149,4 +170,49 @@ describeDb("postgres push subscriptions", () => {
       client.release();
     }
   });
+});
+
+it("falls back to English when the locale column is not migrated yet", async () => {
+  const missing = {
+    message: 'column "locale" of relation "push_subscriptions" does not exist',
+    code: "42703",
+  };
+  const rows = [
+    {
+      user_id: USER_ID,
+      endpoint: "https://push.example/old",
+      p256dh: "k",
+      auth: "a",
+    },
+  ];
+  let upserts = 0;
+  const supabase = {
+    from() {
+      return {
+        select(columns: string) {
+          return {
+            eq() {
+              if (columns.includes("locale")) return Promise.resolve({ data: null, error: missing });
+              return Promise.resolve({ data: rows, error: null });
+            },
+          };
+        },
+        upsert(values: { locale?: string }) {
+          upserts += 1;
+          if ("locale" in values) return Promise.resolve({ error: missing });
+          return Promise.resolve({ error: null });
+        },
+      };
+    },
+  } as unknown as SupabaseClient;
+  await upsertPushSubscription(supabase, USER_ID, {
+    endpoint: "https://push.example/old",
+    p256dh: "k",
+    auth: "a",
+    locale: "zh-TW",
+  });
+  expect(upserts).toBe(2);
+  expect(await listPushSubscriptions(supabase, USER_ID)).toEqual([
+    { endpoint: "https://push.example/old", p256dh: "k", auth: "a", locale: "en" },
+  ]);
 });

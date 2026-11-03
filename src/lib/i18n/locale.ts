@@ -9,8 +9,9 @@ export function isLocale(value: unknown): value is Locale {
 }
 
 /**
- * Primary browser language. Any `zh` or `zh-*` tag (including `zh-Hant`)
- * becomes Traditional Chinese. Every other tag stays English.
+ * Primary browser language. Any `zh` or `zh-*` tag becomes Traditional
+ * Chinese, including `zh-Hant`, `zh-TW`, and `zh-CN`. This app has one
+ * Chinese UI, and it is Traditional. Every other tag stays English.
  */
 export function localeFromBrowserLanguage(language: string): Locale {
   const tag = language.trim().toLowerCase().replace(/_/g, "-");
@@ -28,8 +29,16 @@ export function htmlLang(locale: Locale): "en" | "zh-Hant-TW" {
   return locale === "zh-TW" ? "zh-Hant-TW" : "en";
 }
 
+/**
+ * `x-locale` from the client. `zh-TW`, `zh-tw`, and `zh-Hant-TW` select
+ * Traditional Chinese. `zh-CN` maps to zh-TW as well: there is no separate
+ * Simplified UI.
+ */
 export function localeFromHeader(value: string | null): Locale {
-  return value === "zh-TW" ? "zh-TW" : "en";
+  if (!value) return "en";
+  const tag = value.trim().toLowerCase().replace(/_/g, "-");
+  if (tag === "zh-tw" || tag === "zh-hant-tw" || tag === "zh-cn") return "zh-TW";
+  return "en";
 }
 
 /**

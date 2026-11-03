@@ -10,6 +10,7 @@ import {
   initialLocale,
   LOCALE_BOOT_SCRIPT,
   localeFromBrowserLanguage,
+  localeFromHeader,
 } from "@/lib/i18n/locale";
 import { zhTW } from "@/lib/i18n/zh-TW";
 import { FALLBACK_EPITAPH } from "@/lib/game/pet";
@@ -62,6 +63,11 @@ it("maps zh-*, zh-Hant, and en, and lets a saved choice win", () => {
   expect(initialLocale("nope", "zh-CN")).toBe("zh-TW");
   expect(htmlLang("en")).toBe("en");
   expect(htmlLang("zh-TW")).toBe("zh-Hant-TW");
+  expect(localeFromBrowserLanguage("zh-CN")).toBe("zh-TW");
+  expect(localeFromHeader("zh-tw")).toBe("zh-TW");
+  expect(localeFromHeader("zh-Hant-TW")).toBe("zh-TW");
+  expect(localeFromHeader("zh-CN")).toBe("zh-TW");
+  expect(localeFromHeader("en-US")).toBe("en");
 });
 
 it("boots the same locale the detector would, and hides a non-English document", () => {

@@ -89,7 +89,8 @@ async function bearerFromSupabase(): Promise<Record<string, string>> {
     const signed = await supabase.auth.signInAnonymously();
     token = signed.data.session?.access_token;
     if (signed.error || !token) {
-      throw new Error(signed.error?.message ?? en.errors.signInFailed);
+      if (signed.error) console.error(signed.error);
+      throw new Error(en.errors.signInFailed);
     }
   }
   return { Authorization: `Bearer ${token}` };

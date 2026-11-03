@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { petStateToRow } from "@/lib/db/pet";
+import { en } from "@/lib/i18n/en";
 import type { CompletionCommit, CompletionResult } from "@/lib/server/stores";
 
 /** SQLSTATE raised by complete_task when the pet version compare-and-swap misses. */
@@ -46,7 +47,7 @@ export async function commitCompletion(
   const body = data as { status?: string; version?: number; clock_offset_ms?: number } | null;
   if (!body || body.status === "conflict") return { status: "conflict" };
   if (body.status !== "ok" || typeof body.version !== "number") {
-    throw new Error("complete_task returned an unexpected payload");
+    throw new Error(en.errors.unexpectedPayload);
   }
   return {
     status: "ok",
