@@ -85,7 +85,7 @@ export function DemoControls({
           </PixelButton>
         ))}
       </div>
-      {error ? <p className="mt-2 text-[8px] leading-relaxed text-blood">{error}</p> : null}
+      {error ? <p className="mt-2 text-[8px] leading-relaxed text-blood-text">{error}</p> : null}
     </motion.section>
   );
 }

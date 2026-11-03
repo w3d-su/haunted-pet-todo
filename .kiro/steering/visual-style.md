@@ -32,8 +32,9 @@ Use only these colors. Define them as Tailwind CSS custom properties in `tailwin
 | `--color-pumpkin-dark` | `#a34f00` | Button pressed / hover darken |
 | `--color-slime` | `#4caf50` | Task complete, Hunger bar, positive feedback |
 | `--color-slime-dark` | `#2e7d32` | Slime hover/pressed |
-| `--color-blood` | `#c0392b` | Damage, overdue indicator, HP bar (critical) |
+| `--color-blood` | `#e74c3c` | Damage, overdue indicator, HP bar (critical) |
 | `--color-blood-dark` | `#922b21` | Deep damage pulse |
+| `--color-blood-text` | `#ef6a5b` | Error text. Lighter than `--color-blood` so it clears WCAG AA on `--color-bg-panel-raised` |
 | `--color-mood-purple` | `#9b59b6` | Mood bar fill |
 | `--color-bone` | `#f5e6c8` | Tombstone text, epitaph |
 | `--color-scanline` | `rgba(0,0,0,0.18)` | CRT scanline stripe color |

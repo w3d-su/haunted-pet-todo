@@ -13,6 +13,7 @@
   --color-slime-dark: #2e7d32;
   --color-blood: #e74c3c;
   --color-blood-dark: #922b21;
+  --color-blood-text: #ef6a5b;
   --color-mood-purple: #9b59b6;
   --color-bone: #f5e6c8;
   --color-scanline: rgba(0, 0, 0, 0.18);
@@ -78,7 +79,7 @@ span.w-8 {
   width: 3.5em;
 }
 
-/* The native date control is wider than the card at 17.5px. 14px still clears the minimum and keeps the full placeholder plus the picker icon inside the field. Below 359px the pixel font still overflows that field, so this one control uses a narrower face. */
+/* The native date control is wider than the card at 17.5px. 14px still clears the minimum. Through 389px the pixel font still clips the AM/PM segment, so this one control uses a narrower face. 390px is wide enough for Press Start 2P. */
 @media (max-width: 1023px) {
   input[type="datetime-local"] {
     font-size: 14px;
@@ -91,7 +92,7 @@ span.w-8 {
   }
 }
 
-@media (max-width: 358px) {
+@media (max-width: 389px) {
   input[type="datetime-local"] {
     font-family: ui-sans-serif, system-ui, sans-serif;
     letter-spacing: 0;

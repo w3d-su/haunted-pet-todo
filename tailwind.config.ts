@@ -15,6 +15,7 @@ const config: Config = {
         "slime-dark": "var(--color-slime-dark)",
         blood: "var(--color-blood)",
         "blood-dark": "var(--color-blood-dark)",
+        "blood-text": "var(--color-blood-text)",
         "mood-purple": "var(--color-mood-purple)",
         bone: "var(--color-bone)",
       },
