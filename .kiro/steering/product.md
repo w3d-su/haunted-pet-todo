@@ -27,17 +27,17 @@ Students and chronic procrastinators who need external pressure, entertainment, 
 ## Feature List
 
 ### MVP (must ship for judging)
-- [ ] Task CRUD (create, complete, delete, reorder)
-- [ ] Pet life-stage rendering: egg / hatchling / adult (one base adult form)
-- [ ] Hourly stat decay (HP, Hunger, Mood) via Vercel Cron job
-- [ ] Overdue tasks → zombie sprites crawl on screen
-- [ ] Zombie HP drain per hour
-- [ ] Pet death → tombstone + LLM epitaph
-- [ ] Rebirth: new egg after tombstone is shown
+- [x] Task CRUD (create, complete, delete, reorder)
+- [x] Pet life-stage rendering: egg / hatchling / adult (one base adult form)
+- [x] Daily stat decay (HP, Hunger, Mood) via Vercel Cron job
+- [x] Overdue tasks → zombie sprites crawl on screen
+- [x] Zombie HP drain per hour
+- [x] Pet death → tombstone + LLM epitaph
+- [x] Rebirth: new egg after tombstone is shown
 - [ ] Pet AI personality: nags via toast/speech-bubble, breaks tasks into subtasks, suggests reminder times
-- [ ] Developer time fast-forward control (visible only in dev/demo mode)
+- [x] Developer time fast-forward control (visible only in dev/demo mode)
 - [ ] Web Push notification reminders at user's habitual times
-- [ ] Supabase persistence: tasks, pet state, events log
+- [x] Supabase persistence: tasks, pet state, events log
 - [ ] Pixel-art CRT visual style + spooky sound effects (muted by default)
 - [ ] Vercel deploy
 

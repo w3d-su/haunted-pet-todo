@@ -99,3 +99,68 @@ HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' 
 ## Kiro
 
 `/.kiro` holds the Kiro specs, steering docs, and hooks for this project. It is committed on purpose and is part of the hackathon submission.
+
+## How we used Kiro
+
+`.kiro` is part of the repo: steering files, three specs, and hook definitions. Per the run log, a headless Kiro CLI run drafted the property-test hook and an earlier copy of this section, then `fs_write` and `str_replace` were denied. The text below was applied by hand and checked against the tree. No hook in this list has been exercised in a live Kiro IDE session.
+
+### Steering files (`.kiro/steering/`)
+
+| File | Inclusion | What it contains |
+|---|---|---|
+| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions, habitual-time Web Push, the CRT-and-sound line, and Vercel deploy. |
+| `tech.md` | `always` | Stack, commands, and the coding rules: injectable clock, Zod at boundaries, server-only model calls, RLS, env vars, and accessibility. |
+| `structure.md` | `always` | Directory layout and layer rules. |
+| `build-order.md` | `always` | Week-by-week order across the three specs, naming the file each task owns. |
+| `pet-voice.md` | `fileMatch` (`src/lib/ai/**`, `src/components/pet/**`) | Ghost personality, nag levels, and epitaph style. |
+| `visual-style.md` | `fileMatch` (components, app `.tsx`, `globals.css`, `tailwind.config.ts`) | Palette, type, sprites, motion, and the sound table. |
+
+### Specs (`.kiro/specs/`)
+
+Each spec is `requirements.md`, `design.md`, and `tasks.md`:
+
+- `pet-state-machine` — reducer, pet types, evolution, pet DB helpers, pet API, and pet UI
+- `decay-and-time-travel` — `Clock`, `decayStats`, the daily cron, demo fast-forward, Web Push, and property tests P18–P26
+- `task-lifecycle` — tasks, zombies, migrations, the task API, task UI, AI breakdown, and property tests P11–P17
+
+The `tasks.md` boxes were compared with the code. Decay task 6 is ticked because `src/app/api/cron/decay/route.ts` delegates to `runDecayCron` in `handlers.ts` (bearer check, `syncWorld` catch-up, death count, `{ processed, deaths, failures }`). Decay task 16 stays open because 16.3 is still unchecked. Task-lifecycle task 10.5 records the Up/Down buttons and Alt+Arrow reorder. Pet-state-machine task 11b notes that `src/app/api/auth/anonymous/route.ts` was added in `d19675182c14855580acc67eb00359d7be51c527` and removed in `cf11d891cef262ed18180f7e79fca1d80d6bd98a`: that commit's README says a server proxy would spend Supabase's per-IP anonymous sign-in limit on Vercel's address, so `GameStateProvider.tsx` calls `supabase.auth.signInAnonymously()` directly.
+
+### Hooks (`.kiro/hooks/`)
+
+Five hook files are committed. They are definitions for Kiro, not something this repo has run inside the IDE. `PostFileSave` fires only when the agent saves a file.
+
+A game-core save used to run the property tests twice, once inside `pnpm vitest run tests/game` and once from `run-property-tests`. `run-game-tests` now excludes `**/*.property.ts`, so those files run only from the dedicated property-test hook. That hook also matches `tests/game/*.property.ts`, so editing a property file still runs it once.
+
+| File | Trigger | Matcher | Action |
+|---|---|---|---|
+| `run-game-tests.json` | `PostFileSave` | `(^|[\\/])src[\\/]lib[\\/]game[\\/].*\.tsx?$` or the same shape for `tests/game` | `pnpm vitest run tests/game --exclude '**/*.property.ts' --reporter=dot`. Timeout 60 is on the hook. |
+| `no-date-now-guard.json` | `PostFileSave` | `(^|[\\/])src[\\/]lib[\\/]game[\\/].*\.tsx?$` | `node .kiro/hooks/no-date-now-guard.mjs {{filePath}}`. Timeout 15 is on the hook. The script runs ESLint rule `haunted/no-wall-clock` and writes a violation to stderr with exit 1. |
+| `run-property-tests.json` | `PostFileSave` | the game-core pattern above, or `(^|[\\/])tests[\\/]game[\\/].*\.property\.ts$` | `pnpm vitest run --reporter=dot tests/game/invariants.property.ts tests/game/clamp.property.ts`. Timeout 120 is on the hook. This is the only hook that runs those files. |
+| `visual-style-check.json` | `PostFileSave` | `src/components/.*\.tsx$`, `src/app/.*\.tsx$`, `src/app/globals.css`, `tailwind.config.ts` | Agent prompt that reviews the saved file against `visual-style.md`. |
+| `pet-voice-check.json` | `PostFileSave` | `src/lib/ai/.*\.tsx?$` | Agent prompt that reviews the saved file against `pet-voice.md`. |
+
+Each of those three matchers was compiled with `new RegExp` from the JSON string and checked against real paths. All 8 `src/lib/game/*.ts` files matched, including `src/lib/game/clock.ts` and the Windows-style `src\lib\game\clock.ts`. None matched `foo/notsrc/lib/game/x.ts`, `foo\notsrc\lib\game\x.ts`, `src/lib/gameplay/clock.ts`, or any of the 22 files under `src/components/`. `no-date-now-guard` matched none of the 40 files under `tests/`. `run-game-tests` matched the 8 files under `tests/game/` and not `tests/components/order.test.ts`. `run-property-tests` matched only `tests/game/invariants.property.ts` and `tests/game/clamp.property.ts` from `tests/`.
+
+From the repo root, with `NODE_PATH` unset:
+
+```sh
+env -u NODE_PATH pnpm vitest run --reporter=dot tests/game/invariants.property.ts tests/game/clamp.property.ts
+```
+
+Exit code 0. Vitest 5.0.5 reported 2 files, 30 tests passed, duration 677ms, on 2026-11-03. Those are the only `*.property.ts` files under `tests/`. `invariants.property.ts` contains P1–P26 plus P19b. `clamp.property.ts` is the clamp bounds property. That shell run is not a Kiro save.
+
+### What is verified, and what is not
+
+Checked in this tree, outside any Kiro IDE session:
+
+- `tests/game/date-guard.test.ts` spawns `.kiro/hooks/no-date-now-guard.mjs` with `NODE_PATH` removed. A clean game file exits 0. A computed `Date.now` exits 1 and the message goes to stderr. That test is a Vitest process, not a Kiro `PostFileSave`.
+- `runDecayCron`, which `src/app/api/cron/decay/route.ts` calls, returns 401 without the bearer secret in `tests/api/cron.test.ts` and again in `tests/db/tasks.test.ts`.
+- `POST /api/demo/fast-forward` returns 403 when `DEMO_MODE` is not `"true"` in `tests/api/fast-forward.test.ts`.
+- Snake_case column mapping is asserted in `tests/db/pet.test.ts` (`savePetState writes snake_case columns`) and `tests/db/tasks.test.ts` (`maps a task to snake_case`).
+
+Not yet verified:
+
+- Decay-and-time-travel task 16.3: add `Date.now()` to a game file, save it inside a live Kiro IDE session, and watch `no-date-now-guard` fire. The hook has not been exercised there.
+- `run-property-tests.json` has not been exercised in a live Kiro IDE session. The command above was run from the shell only.
+- There is no Vercel deploy. `product.md` still leaves "Vercel deploy" unchecked.
+- Four sounds listed in `visual-style.md` and `structure.md` are absent from `public/sfx/`: `pet_hurt.ogg`, `pet_death.ogg`, `pet_hatch.ogg`, and `pet_evolve.ogg`. `SoundProvider` only references `task_complete.ogg` and `zombie_spawn.ogg`, which are the files present.

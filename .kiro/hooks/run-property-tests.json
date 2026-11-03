@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Run Property Tests on Game Core Save",
+      "description": "When a file in src/lib/game/ or a tests/game/*.property.ts file is saved, runs only the fast-check property test files through Vitest. This is the only hook that runs them. run-game-tests excludes *.property.ts.",
+      "trigger": "PostFileSave",
+      "matcher": "(^|[\\\\/])src[\\\\/]lib[\\\\/]game[\\\\/].*\\.tsx?$|(^|[\\\\/])tests[\\\\/]game[\\\\/].*\\.property\\.ts$",
+      "timeout": 120,
+      "action": {
+        "type": "command",
+        "command": "pnpm vitest run --reporter=dot tests/game/invariants.property.ts tests/game/clamp.property.ts"
+      }
+    }
+  ]
+}
