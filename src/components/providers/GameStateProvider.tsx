@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { gameRequest, supabaseConfigured } from "./game-request";
 import { petTransitionSound } from "./pet-sound";
@@ -95,7 +95,7 @@ export function GameStateProvider({
   const evolveTimer = useRef<number | null>(null);
   const petRef = useRef<PetState | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const [petResponse, taskResponse] = await Promise.all([
       gameRequest("/api/pet"),
       gameRequest("/api/tasks"),
@@ -134,7 +134,7 @@ export function GameStateProvider({
     setNow(petBody.now);
     setClockOffsetMs(petBody.clockOffsetMs);
     setTasks(taskBody.tasks);
-  }
+  }, [play]);
 
   function noticeEvolution(emitted: readonly { type?: string }[] | undefined) {
     if (!emitted?.some((event) => event.type === "PET_EVOLVED")) return;
@@ -168,7 +168,7 @@ export function GameStateProvider({
       if (evolveTimer.current !== null) window.clearTimeout(evolveTimer.current);
     };
     // Boot once. Later writes call refresh themselves.
-  }, [demoMode]);
+  }, [demoMode, refresh]);
 
   useEffect(() => {
     if (loading || error) return;
