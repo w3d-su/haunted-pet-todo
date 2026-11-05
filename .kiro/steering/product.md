@@ -39,7 +39,7 @@ Students and chronic procrastinators who need external pressure, entertainment, 
 - [ ] Web Push notification reminders at user's habitual times
 - [x] Supabase persistence: tasks, pet state, events log
 - [ ] Pixel-art CRT visual style + spooky sound effects (muted by default)
-- [ ] Vercel deploy
+- [x] Vercel deploy
 
 ### Stretch Goals (post-MVP / nice to have)
 - [ ] Multiple evolved adult forms (time-of-day × task-category matrix)
