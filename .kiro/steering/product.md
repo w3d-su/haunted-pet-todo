@@ -36,10 +36,10 @@ Students and chronic procrastinators who need external pressure, entertainment, 
 - [x] Rebirth: new egg after tombstone is shown
 - [ ] Pet AI personality: nags via toast/speech-bubble, breaks tasks into subtasks, suggests reminder times
 - [x] Developer time fast-forward control (visible only in dev/demo mode)
-- [ ] Web Push notification reminders at user's habitual times
+- [x] Web Push notification reminders at user's habitual times
 - [x] Supabase persistence: tasks, pet state, events log
 - [ ] Pixel-art CRT visual style + spooky sound effects (muted by default)
-- [ ] Vercel deploy
+- [x] Vercel deploy
 
 ### Stretch Goals (post-MVP / nice to have)
 - [ ] Multiple evolved adult forms (time-of-day × task-category matrix)

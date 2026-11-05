@@ -122,6 +122,15 @@
     - Files: `src/lib/db/nag.ts`, `src/app/api/cron/decay/route.ts`, `supabase/migrations/0005_nag_and_budget.sql`
   _Requirements: 10.1–10.4_
 
+- [x] 14b. Send the nag at the habitual hour from an hourly trigger
+  - [x] 14b.1 `habitualHour` and `reminderHour` in `src/lib/game/habit.ts` (pure; 3-sample minimum; default 19:00)
+  - [x] 14b.2 Move `remind` into `src/lib/server/remind.ts` so both crons share it and `claim_nag_day`
+  - [x] 14b.3 `GET /api/cron/remind`: bearer check, users with a subscription, catch-up, send once the local hour reaches the reminder hour
+  - [x] 14b.4 `HOURLY_REMINDERS=true` turns off the nag in the daily cron
+  - [x] 14b.5 `.github/workflows/remind.yml` calls the route at minute 17 every hour
+    - Files: `src/lib/game/habit.ts`, `src/lib/server/remind.ts`, `src/app/api/cron/remind/`, `src/lib/db/push.ts`, `.github/workflows/remind.yml`, `tests/game/habit.test.ts`, `tests/api/remind.test.ts`
+  _Requirements: 11.1–11.5_
+
 - [x] 15. (Week 3) Add push subscription UI in `GameStateProvider`
   - [x] 15.1 Request notification permission on first user interaction after sign-in
   - [x] 15.2 POST resulting `PushSubscription` to `/api/push`
@@ -130,11 +139,11 @@
 
 ## Week 4 (Nov 23–30): Polish, Accessibility, Final Tests
 
-- [ ] 16. (Week 4) Fix and verify `no-date-now-guard` hook
+- [x] 16. (Week 4) Fix and verify `no-date-now-guard` hook
   - [x] 16.1 Confirm hook reads file path from stdin JSON (`event.file_path`) via Node, not `$KIRO_FILE_PATH`
   - [x] 16.2 Confirm violation message is written to stderr (exit 1) not stdout
-  - [ ] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output. Still needs a live test in Kiro.
-    - Files: `.kiro/hooks/no-date-now-guard.json`
+  - [x] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output. Done 2026-11-06 with Kiro CLI 3.0.0 (`kiro-cli chat --v3 --no-interactive`) started in the repo root. Kiro V3 passed `{{filePath}}` through unexpanded and sent `file_path` at the top level of the stdin JSON, not under `event`, so the script warned "no file path" and exited 0. After the script also read top-level `file_path`, adding `Date.now()` to `src/lib/game/clock.ts` exited 1 with `clock.ts:5 src/lib/game must not use Date.now()` on stderr, and removing it exited 0. Kiro discards hook stdout for `PostFileSave` and the agent saw no hook text, so the exit code and stderr were captured by a temporary logging hook that ran the same script with the same stdin.
+    - Files: `.kiro/hooks/no-date-now-guard.json`, `.kiro/hooks/no-date-now-guard.mjs`
   _Requirements: 2.1, 2.2_
 
 - [x] 17. (Week 4) Accessibility and UX for DemoControls

@@ -30,7 +30,8 @@ pnpm test
 | `OPENAI_BASE_URL` | server | Optional compatible endpoint |
 | `AI_DAILY_CAP` | server | Site-wide model calls per UTC day (default 200) |
 | `VAPID_PRIVATE_KEY` | server | Web Push private key |
-| `CRON_SECRET` | server | Bearer token for the daily cron |
+| `CRON_SECRET` | server | Bearer token for the daily cron and `/api/cron/remind`. Also a GitHub repository secret |
+| `HOURLY_REMINDERS` | server | `true` when the hourly workflow sends nags; the daily cron then skips its nag |
 | `DEMO_MODE` | server | `true` shows fast-forward. Not a `NEXT_PUBLIC_` variable |
 | `DEMO_COOKIE_SECRET` | server | HMAC for the demo cookie. Empty means a process-local key |
 
@@ -38,7 +39,7 @@ Vercel Hobby runs the cron in `vercel.json` once a day (`0 8 * * *`). Fluid comp
 
 ## Sound
 
-`public/sfx/task_complete.ogg` and `public/sfx/zombie_spawn.ogg` are original square-wave tones generated with ffmpeg for this project (not third-party recordings). Sound stays muted until the player uses the mute toggle, and playback waits for a pointer or key gesture.
+`public/sfx/task_complete.ogg` and `public/sfx/zombie_spawn.ogg` are original square-wave tones generated with ffmpeg for this project (not third-party recordings). `pet_hurt.ogg` (0.3 s drop), `pet_death.ogg` (1.5 s slide down), `pet_hatch.ogg` (1.0 s C-E-G-C arpeggio), and `pet_evolve.ogg` (1.2 s two-octave run) were made the same way with ffmpeg's `aevalsrc`, as 22050 Hz mono Vorbis. `GameStateProvider` compares each pet read with the previous one and plays at most one of them through `petTransitionSound` in `src/components/providers/pet-sound.ts`: death first, then evolution, hatching, and a hit of at least 1 HP. The first read after page load plays nothing. Sound stays muted until the player uses the mute toggle, and playback waits for a pointer or key gesture.
 
 ## Supabase
 
@@ -88,7 +89,7 @@ Authenticated database roles can select their own rows and cannot write. The API
 
 `POST /api/ai/epitaph` carves a tombstone line when the dead pet is viewed. The daily cron only records the death and leaves the fallback line in place, so a crowd of deaths does not call the model. `POST /api/ai/breakdown` splits a large task into 3–7 subtasks. Both read `OPENAI_API_KEY` on the server only. If that variable is missing, the model reply fails validation, or the daily budget is spent, they use a fixed fallback and do not call the model. `AI_DAILY_CAP` (default 200) is the site-wide cap per UTC day, and each user gets 20 calls that day. Set a spend limit on the OpenAI project as well. `PATCH /api/pet` still accepts only rebirth and the time zone.
 
-`POST /api/push` stores a Web Push subscription for an https endpoint on FCM, Mozilla, Windows, or Apple, at most five per user. The keys must be a 65-byte p256dh and a 16-byte auth secret. Hobby only allows a daily cron, so the job cannot nag at a habitual hour. During that daily run it sends at most one nag per local day, and only when the user still has an open task and finished nothing today in the pet's time zone. A 404 or 410 from the push service deletes that subscription. `VAPID_PRIVATE_KEY` stays on the server. The browser subscribes with `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. `push_subscriptions` is select-only for the signed-in user; the service role writes it.
+`POST /api/push` stores a Web Push subscription for an https endpoint on FCM, Mozilla, Windows, or Apple, at most five per user. The keys must be a 65-byte p256dh and a 16-byte auth secret. Hobby only allows a daily cron. A nag goes out at most once per local day, and only when the user still has an open task and finished nothing today in the pet's time zone. By default the daily run sends it. `.github/workflows/remind.yml` calls `GET /api/cron/remind` at minute 17 of every hour with the repository secret `CRON_SECRET`. That route nags each user with a subscription once their local hour reaches their reminder hour: the most common hour of their last 10 completions, or 19:00 with fewer than three (`src/lib/game/habit.ts`). Set `HOURLY_REMINDERS=true` on Vercel once the workflow runs, so the daily cron stops sending its own nag. Both paths share `claim_nag_day`, so a user never gets two on one local day. GitHub can start a scheduled run late or drop it, and the route sends at or after the hour, so a late run still sends that day. GitHub also disables scheduled workflows in a public repo after 60 days without activity. A 404 or 410 from the push service deletes that subscription. `VAPID_PRIVATE_KEY` stays on the server. The browser subscribes with `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. `push_subscriptions` is select-only for the signed-in user; the service role writes it.
 
 ## Database concurrency tests
 
@@ -104,13 +105,13 @@ HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' 
 
 ## How we used Kiro
 
-`.kiro` is part of the repo: steering files, three specs, and hook definitions. Per the run log, a headless Kiro CLI run drafted the property-test hook and an earlier copy of this section, then `fs_write` and `str_replace` were denied. The text below was applied by hand and checked against the tree. No hook in this list has been exercised in a live Kiro IDE session.
+`.kiro` is part of the repo: steering files, three specs, and hook definitions. Per the run log, a headless Kiro CLI run drafted the property-test hook and an earlier copy of this section, then `fs_write` and `str_replace` were denied. The text below was applied by hand and checked against the tree. On 2026-11-06, `no-date-now-guard` and the `run-property-tests` command were exercised by a headless Kiro CLI 3.0.0 V3 session (details under "What is verified"). No hook has been exercised in the Kiro IDE.
 
 ### Steering files (`.kiro/steering/`)
 
 | File | Inclusion | What it contains |
 |---|---|---|
-| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions, habitual-time Web Push, the CRT-and-sound line, and Vercel deploy. |
+| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions and the CRT-and-sound line. |
 | `tech.md` | `always` | Stack, commands, and the coding rules: injectable clock, Zod at boundaries, server-only model calls, RLS, env vars, and accessibility. |
 | `structure.md` | `always` | Directory layout and layer rules. |
 | `build-order.md` | `always` | Week-by-week order across the three specs, naming the file each task owns. |
@@ -125,7 +126,7 @@ Each spec is `requirements.md`, `design.md`, and `tasks.md`:
 - `decay-and-time-travel` — `Clock`, `decayStats`, the daily cron, demo fast-forward, Web Push, and property tests P18–P26
 - `task-lifecycle` — tasks, zombies, migrations, the task API, task UI, AI breakdown, and property tests P11–P17
 
-The `tasks.md` boxes were compared with the code. Decay task 6 is ticked because `src/app/api/cron/decay/route.ts` delegates to `runDecayCron` in `handlers.ts` (bearer check, `syncWorld` catch-up, death count, `{ processed, deaths, failures }`). Decay task 16 stays open because 16.3 is still unchecked. Task-lifecycle task 10.5 records the Up/Down buttons and Alt+Arrow reorder. Pet-state-machine task 11b notes that `src/app/api/auth/anonymous/route.ts` was added in `d19675182c14855580acc67eb00359d7be51c527` and removed in `cf11d891cef262ed18180f7e79fca1d80d6bd98a`: that commit's README says a server proxy would spend Supabase's per-IP anonymous sign-in limit on Vercel's address, so `GameStateProvider.tsx` calls `supabase.auth.signInAnonymously()` directly.
+The `tasks.md` boxes were compared with the code. Decay task 6 is ticked because `src/app/api/cron/decay/route.ts` delegates to `runDecayCron` in `handlers.ts` (bearer check, `syncWorld` catch-up, death count, `{ processed, deaths, failures }`). Decay task 16 is ticked because 16.3 was run in Kiro CLI V3 on 2026-11-06. Task-lifecycle task 10.5 records the Up/Down buttons and Alt+Arrow reorder. Pet-state-machine task 11b notes that `src/app/api/auth/anonymous/route.ts` was added in `d19675182c14855580acc67eb00359d7be51c527` and removed in `cf11d891cef262ed18180f7e79fca1d80d6bd98a`: that commit's README says a server proxy would spend Supabase's per-IP anonymous sign-in limit on Vercel's address, so `GameStateProvider.tsx` calls `supabase.auth.signInAnonymously()` directly.
 
 ### Hooks (`.kiro/hooks/`)
 
@@ -162,7 +163,12 @@ Checked in this tree, outside any Kiro IDE session:
 
 Not yet verified:
 
-- Decay-and-time-travel task 16.3: add `Date.now()` to a game file, save it inside a live Kiro IDE session, and watch `no-date-now-guard` fire. The hook has not been exercised there.
-- `run-property-tests.json` has not been exercised in a live Kiro IDE session. The command above was run from the shell only.
-- There is no Vercel deploy. `product.md` still leaves "Vercel deploy" unchecked.
-- Four sounds listed in `visual-style.md` and `structure.md` are absent from `public/sfx/`: `pet_hurt.ogg`, `pet_death.ogg`, `pet_hatch.ogg`, and `pet_evolve.ogg`. `SoundProvider` only references `task_complete.ogg` and `zombie_spawn.ogg`, which are the files present.
+- None of the hooks has been exercised in the Kiro IDE. The Kiro CLI V3 run below is the only live test.
+- `run-game-tests`, `visual-style-check`, and `pet-voice-check` have not been fired by Kiro.
+- Production is <https://haunted-pet-todo.vercel.app>, deployed by the Vercel GitHub integration from `main`. On 2026-11-06 it served `55ac1a7` with all six `public/sfx/` files, `/api/pet` and `/api/cron/decay` returned 401 without credentials, the client bundle pointed at a Supabase project, and PostgREST reported `permission denied for function reorder_tasks` (so migration 0006 exists there). Nobody has played through the deployed app end to end.
+
+Kiro CLI V3 run (2026-11-06, `kiro-cli chat --v3 --no-interactive --trust-all-tools` in the repo root, Windows):
+
+- Kiro sends `{"hook_event_name":"PostFileSave","cwd":...,"file_path":...}` on stdin and leaves `{{filePath}}` unexpanded. `no-date-now-guard.mjs` first missed the top-level `file_path` and exited 0 with "no file path". It now reads that field. An agent edit that added `Date.now()` to `src/lib/game/clock.ts` then exited 1 with `clock.ts:5 src/lib/game must not use Date.now()` on stderr, and the edit that removed it exited 0.
+- The `run-property-tests` command, fired by an agent edit to `src/lib/game/constants.ts`, exited 0 with 2 files and 30 tests passed. The same run exited 1 when `pnpm` was not on `PATH`. Run `corepack enable` so the `pnpm` hooks can start.
+- Kiro discards hook stdout for `PostFileSave`, and the agent saw no hook text. Exit codes and stderr were captured by a temporary logging hook that ran the same commands with the same stdin. That hook was then deleted.

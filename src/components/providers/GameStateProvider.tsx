@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocale } from "@/components/providers/LocaleProvider";
 import { gameRequest, supabaseConfigured } from "./game-request";
+import { petTransitionSound } from "./pet-sound";
 import { useSound } from "@/components/providers/SoundProvider";
 import { en } from "@/lib/i18n/en";
 import { hpSpent, type PetState } from "@/lib/game/pet";
@@ -92,6 +93,7 @@ export function GameStateProvider({
   const [evolving, setEvolving] = useState(false);
   const [breakdownLine, setBreakdownLine] = useState<string | null>(null);
   const evolveTimer = useRef<number | null>(null);
+  const petRef = useRef<PetState | null>(null);
 
   async function refresh() {
     const [petResponse, taskResponse] = await Promise.all([
@@ -126,6 +128,9 @@ export function GameStateProvider({
       }
     }
     setPet(nextPet);
+    const transition = petTransitionSound(petRef.current, nextPet);
+    petRef.current = nextPet;
+    if (transition) play(transition);
     setNow(petBody.now);
     setClockOffsetMs(petBody.clockOffsetMs);
     setTasks(taskBody.tasks);

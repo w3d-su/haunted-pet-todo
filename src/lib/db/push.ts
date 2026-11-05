@@ -106,3 +106,23 @@ export async function deletePushSubscription(
     .eq("endpoint", endpoint);
   throwOnError(error);
 }
+
+const PUSH_PAGE = 1000;
+
+/** Distinct user ids with at least one subscription, one page at a time. */
+export async function listPushUserIds(supabase: SupabaseClient): Promise<string[]> {
+  const ids = new Set<string>();
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("push_subscriptions")
+      .select("user_id")
+      .order("user_id", { ascending: true })
+      .range(from, from + PUSH_PAGE - 1);
+    throwOnError(error);
+    const page = z.array(z.object({ user_id: z.uuid() })).parse(data ?? []);
+    if (page.length === 0) return [...ids];
+    for (const row of page) ids.add(row.user_id);
+    from += page.length;
+  }
+}

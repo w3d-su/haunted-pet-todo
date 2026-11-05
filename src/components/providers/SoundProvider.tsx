@@ -15,6 +15,10 @@ const STORAGE_KEY = "haunted-muted";
 export const SOUND_FILES = {
   task_complete: "/sfx/task_complete.ogg",
   zombie_spawn: "/sfx/zombie_spawn.ogg",
+  pet_hurt: "/sfx/pet_hurt.ogg",
+  pet_death: "/sfx/pet_death.ogg",
+  pet_hatch: "/sfx/pet_hatch.ogg",
+  pet_evolve: "/sfx/pet_evolve.ogg",
 } as const;
 
 export type SoundName = keyof typeof SOUND_FILES;
