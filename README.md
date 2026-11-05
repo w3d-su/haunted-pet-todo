@@ -30,7 +30,8 @@ pnpm test
 | `OPENAI_BASE_URL` | server | Optional compatible endpoint |
 | `AI_DAILY_CAP` | server | Site-wide model calls per UTC day (default 200) |
 | `VAPID_PRIVATE_KEY` | server | Web Push private key |
-| `CRON_SECRET` | server | Bearer token for the daily cron |
+| `CRON_SECRET` | server | Bearer token for the daily cron and `/api/cron/remind`. Also a GitHub repository secret |
+| `HOURLY_REMINDERS` | server | `true` when the hourly workflow sends nags; the daily cron then skips its nag |
 | `DEMO_MODE` | server | `true` shows fast-forward. Not a `NEXT_PUBLIC_` variable |
 | `DEMO_COOKIE_SECRET` | server | HMAC for the demo cookie. Empty means a process-local key |
 
@@ -87,7 +88,7 @@ Authenticated database roles can select their own rows and cannot write. The API
 
 `POST /api/ai/epitaph` carves a tombstone line when the dead pet is viewed. The daily cron only records the death and leaves the fallback line in place, so a crowd of deaths does not call the model. `POST /api/ai/breakdown` splits a large task into 3–7 subtasks. Both read `OPENAI_API_KEY` on the server only. If that variable is missing, the model reply fails validation, or the daily budget is spent, they use a fixed fallback and do not call the model. `AI_DAILY_CAP` (default 200) is the site-wide cap per UTC day, and each user gets 20 calls that day. Set a spend limit on the OpenAI project as well. `PATCH /api/pet` still accepts only rebirth and the time zone.
 
-`POST /api/push` stores a Web Push subscription for an https endpoint on FCM, Mozilla, Windows, or Apple, at most five per user. The keys must be a 65-byte p256dh and a 16-byte auth secret. Hobby only allows a daily cron, so the job cannot nag at a habitual hour. During that daily run it sends at most one nag per local day, and only when the user still has an open task and finished nothing today in the pet's time zone. A 404 or 410 from the push service deletes that subscription. `VAPID_PRIVATE_KEY` stays on the server. The browser subscribes with `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. `push_subscriptions` is select-only for the signed-in user; the service role writes it.
+`POST /api/push` stores a Web Push subscription for an https endpoint on FCM, Mozilla, Windows, or Apple, at most five per user. The keys must be a 65-byte p256dh and a 16-byte auth secret. Hobby only allows a daily cron. A nag goes out at most once per local day, and only when the user still has an open task and finished nothing today in the pet's time zone. By default the daily run sends it. `.github/workflows/remind.yml` calls `GET /api/cron/remind` at minute 17 of every hour with the repository secret `CRON_SECRET`. That route nags each user with a subscription once their local hour reaches their reminder hour: the most common hour of their last 10 completions, or 19:00 with fewer than three (`src/lib/game/habit.ts`). Set `HOURLY_REMINDERS=true` on Vercel once the workflow runs, so the daily cron stops sending its own nag. Both paths share `claim_nag_day`, so a user never gets two on one local day. GitHub can start a scheduled run late or drop it, and the route sends at or after the hour, so a late run still sends that day. GitHub also disables scheduled workflows in a public repo after 60 days without activity. A 404 or 410 from the push service deletes that subscription. `VAPID_PRIVATE_KEY` stays on the server. The browser subscribes with `NEXT_PUBLIC_VAPID_PUBLIC_KEY`. `push_subscriptions` is select-only for the signed-in user; the service role writes it.
 
 ## Database concurrency tests
 
@@ -109,7 +110,7 @@ HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' 
 
 | File | Inclusion | What it contains |
 |---|---|---|
-| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions, habitual-time Web Push, and the CRT-and-sound line. |
+| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions and the CRT-and-sound line. |
 | `tech.md` | `always` | Stack, commands, and the coding rules: injectable clock, Zod at boundaries, server-only model calls, RLS, env vars, and accessibility. |
 | `structure.md` | `always` | Directory layout and layer rules. |
 | `build-order.md` | `always` | Week-by-week order across the three specs, naming the file each task owns. |
