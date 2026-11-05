@@ -1,0 +1,40 @@
+name: Hourly reminder
+
+# Vercel Hobby only allows a daily cron. This calls /api/cron/remind every
+# hour so each user is nagged at their own local reminder hour.
+# Needs the repository secret CRON_SECRET (the same value as on Vercel).
+# REMINDER_URL is an optional repository variable; it defaults to production.
+# GitHub may start a scheduled run late or skip it under load. The route
+# sends once the local hour is at or past the reminder hour, so a late run
+# still sends that day.
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: hourly-reminder
+  cancel-in-progress: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Call /api/cron/remind
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          REMINDER_URL: ${{ vars.REMINDER_URL || 'https://haunted-pet-todo.vercel.app/api/cron/remind' }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not set for this repository"
+            exit 1
+          fi
+          status=$(curl -sS -o body.json -w '%{http_code}' --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" "$REMINDER_URL")
+          cat body.json
+          echo
+          test "$status" = "200"
