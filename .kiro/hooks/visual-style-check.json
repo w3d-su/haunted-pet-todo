@@ -8,7 +8,7 @@
       "matcher": "src/components/.*\\.tsx$|src/app/.*\\.tsx$|src/app/globals\\.css$|tailwind\\.config\\.ts$",
       "action": {
         "type": "agent",
-        "prompt": "A UI file was just saved. Review it against .kiro/steering/visual-style.md and report any violations concisely. Check for: non-palette hex values or Tailwind default colors (e.g. blue-500), missing `pixel-art` CSS class on sprite <img> elements, spring physics in Framer Motion (forbidden), missing `useReducedMotion()` guard on animated components, `outline: none` without a focus-visible replacement, missing `alt` text on sprites, font usage other than Press Start 2P, font sizes below 8px, StatBars that convey state through color alone without a text label. List each violation as a short bullet with the line number. If there are no violations, say 'Visual style: ✅ no violations found.'"
+        "prompt": "A UI file was just saved. Review it against .kiro/steering/visual-style.md and report any violations concisely. Check for: non-palette hex values or Tailwind default colors (e.g. blue-500), missing `pixel-art` CSS class on sprite <img> elements, spring physics in Framer Motion (forbidden), missing `useReducedMotion()` guard on animated components, `outline: none` without a focus-visible replacement, missing `alt` text on sprites, font usage other than Press Start 2P (do not flag the documented exception: ui-sans-serif on input[type=datetime-local] inside @media (max-width: 389px) in globals.css), font sizes below 8px, StatBars that convey state through color alone without a text label. List each violation as a short bullet with the line number. If there are no violations, say 'Visual style: ✅ no violations found.'"
       }
     }
   ]
