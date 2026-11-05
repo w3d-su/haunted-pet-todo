@@ -1,0 +1,17 @@
+"use client";
+
+import { useLocale } from "@/components/providers/LocaleProvider";
+
+export function Landing() {
+  const { t } = useLocale();
+
+  return (
+    <main className="flex flex-1 items-center justify-center bg-bg-void px-6 py-16 text-ghost-white">
+      <section className="w-full max-w-xl border-2 border-ghost-white bg-bg-panel px-6 py-8 text-center">
+        <p className="text-[10px] leading-relaxed text-pumpkin">{t.brand.kicker}</p>
+        <h1 className="mt-6 text-[16px] leading-relaxed">{t.brand.title}</h1>
+        <p className="mt-6 text-[10px] leading-relaxed text-ghost-dim">{t.landing.blurb}</p>
+      </section>
+    </main>
+  );
+}

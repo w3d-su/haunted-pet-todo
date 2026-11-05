@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { reorderTask } from "@/components/tasks/order";
 import { TaskItem } from "@/components/tasks/TaskItem";
 
@@ -29,6 +30,7 @@ export function TaskList({
   onReorder: (orderedIds: readonly string[]) => void;
   onBreakdown: (id: string) => void;
 }) {
+  const { t } = useLocale();
   const [draggedId, setDraggedId] = useState<string | null>(null);
 
   function drop(targetId: string) {
@@ -55,7 +57,7 @@ export function TaskList({
   }
 
   if (tasks.length === 0) {
-    return <p className="mt-6 text-[10px] leading-relaxed text-ghost-dim">No tasks yet. The egg is waiting.</p>;
+    return <p className="mt-6 text-[10px] leading-relaxed text-ghost-dim">{t.app.emptyTasks}</p>;
   }
 
   return (

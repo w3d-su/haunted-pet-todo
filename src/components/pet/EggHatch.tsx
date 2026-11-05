@@ -2,10 +2,12 @@
 
 import { useEffect } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useLocale } from "@/components/providers/LocaleProvider";
 
 /** Shake, then crack, then dissolve. 0.8s unless motion is reduced. */
 export function EggHatch({ onDone }: { onDone: () => void }) {
   const reduced = useReducedMotion() === true;
+  const { t } = useLocale();
 
   useEffect(() => {
     const timer = window.setTimeout(onDone, reduced ? 0 : 800);
@@ -16,7 +18,7 @@ export function EggHatch({ onDone }: { onDone: () => void }) {
     <motion.img
       className="pixel-art h-16 w-16"
       src="/sprites/egg_idle.png"
-      alt="Ghost pet egg hatching"
+      alt={t.sprite.hatching}
       initial={false}
       animate={
         reduced

@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { PixelButton } from "@/components/ui/PixelButton";
 import type { TaskView } from "@/components/tasks/TaskList";
 
@@ -14,6 +15,7 @@ export function SubtaskList({
   onComplete: (id: string) => void;
   onBreakdown: (id: string) => void;
 }) {
+  const { t } = useLocale();
   const offer = task.size === "large" && !task.breakdownSuggested && task.status !== "done";
   if (!offer && task.subtasks.length === 0) return null;
 
@@ -21,7 +23,7 @@ export function SubtaskList({
     <div className="mt-3">
       {offer ? (
         <PixelButton disabled={pending} onClick={() => onBreakdown(task.id)}>
-          Ask ghost to break this down 👻
+          {t.task.breakDown}
         </PixelButton>
       ) : null}
       {task.subtasks.length > 0 ? (
@@ -34,7 +36,7 @@ export function SubtaskList({
                   type="checkbox"
                   checked={done}
                   disabled={done || pending}
-                  aria-label={`Complete ${subtask.title}`}
+                  aria-label={t.task.complete(subtask.title)}
                   className="mt-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-pumpkin)]"
                   onChange={() => onComplete(subtask.id)}
                 />

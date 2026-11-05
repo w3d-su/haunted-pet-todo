@@ -1,5 +1,7 @@
 "use client";
 
+import { en } from "@/lib/i18n/en";
+
 export function supabaseConfigured(): boolean {
   return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
@@ -28,14 +30,20 @@ export async function gameRequest(path: string, init?: RequestInit): Promise<Res
   if (supabaseConfigured()) {
     sessionClient ??= openSession().catch((cause) => {
       sessionClient = undefined;
-      throw cause;
+      console.error(cause);
+      throw new Error(en.errors.signInFailed);
     });
     const client = await sessionClient;
     const { data, error } = await client.auth.getSession();
-    if (error || !data.session) throw new Error(error?.message ?? "Sign-in failed. Reload to try again.");
+    if (error || !data.session) {
+      sessionClient = undefined;
+      if (error) console.error(error);
+      throw new Error(en.errors.signInFailed);
+    }
     headers.set("authorization", `Bearer ${data.session.access_token}`);
   }
   if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
+  if (typeof document !== "undefined") headers.set("x-locale", document.documentElement.lang);
   headers.set("x-time-zone", Intl.DateTimeFormat().resolvedOptions().timeZone);
   return fetch(path, { ...init, headers, credentials: "same-origin" });
 }

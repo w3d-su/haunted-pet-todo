@@ -1,4 +1,6 @@
 import { quoteForPrompt } from "@/lib/ai/text";
+import { dictionaryFor } from "@/lib/i18n/dictionaries";
+import type { Locale } from "@/lib/i18n/locale";
 import type { PetStage } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 
@@ -35,19 +37,12 @@ export function buildNagPrompt(
   pet: { stage: PetStage },
   tasks: readonly Pick<Task, "title" | "status" | "deletedAt">[],
   level: NagLevel,
+  locale: Locale = "en",
 ): string {
-  if (pet.stage === "hatchling") {
-    if (level === "gentle") return "boo… 👻 one tiny task?";
-    if (level === "dramatic") return "nooo… overdue bad. do thing pls 😢";
-    return "nooo… finish one task so I can rest 😢";
-  }
+  const nag = dictionaryFor(locale).nag;
+  if (pet.stage === "hatchling") return nag.hatchling[level];
   const open = tasks.find((task) => task.deletedAt === null && task.status !== "done");
   const name = quoteForPrompt(open?.title ?? "that task", 40);
-  if (level === "haunting") {
-    return `The ghost of "${name}" will not rest. Do it, then I can. 💀`;
-  }
-  if (level === "dramatic") {
-    return "WOOOO it has been HOURS and your task is still undone. Finish one 😱👻";
-  }
-  return "One tiny task. Just one. I believe in you 👻";
+  if (level === "haunting") return nag.adult.haunting(name);
+  return nag.adult[level];
 }

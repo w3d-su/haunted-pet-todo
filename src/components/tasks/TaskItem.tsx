@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { PixelButton } from "@/components/ui/PixelButton";
 import { SubtaskList } from "@/components/tasks/SubtaskList";
 import type { TaskView } from "@/components/tasks/TaskList";
@@ -33,6 +34,7 @@ export function TaskItem({
   onMoveDown?: () => void;
 }) {
   const reduced = useReducedMotion() === true;
+  const { t } = useLocale();
   const [flash, setFlash] = useState(false);
   const done = task.status === "done";
   const upRef = useRef<HTMLButtonElement>(null);
@@ -103,7 +105,7 @@ export function TaskItem({
             {task.title}
           </p>
           <p className={`mt-2 text-[8px] uppercase leading-relaxed ${badge[task.status]}`}>
-            {task.status}
+            {t.status[task.status]}
           </p>
         </div>
         <div className="flex flex-wrap justify-end gap-2">
@@ -111,7 +113,7 @@ export function TaskItem({
             <PixelButton
               ref={upRef}
               aria-disabled={pending || undefined}
-              aria-label={`Up, move ${task.title}`}
+              aria-label={t.task.moveUp(task.title)}
               className={pending ? "border-ghost-dim text-ghost-dim" : ""}
               onFocus={() => rememberMove("up")}
               onBlur={() => forgetMove("up")}
@@ -120,14 +122,14 @@ export function TaskItem({
                 if (!pending) onMoveUp();
               }}
             >
-              Up
+              {t.task.up}
             </PixelButton>
           ) : null}
           {onMoveDown ? (
             <PixelButton
               ref={downRef}
               aria-disabled={pending || undefined}
-              aria-label={`Down, move ${task.title}`}
+              aria-label={t.task.moveDown(task.title)}
               className={pending ? "border-ghost-dim text-ghost-dim" : ""}
               onFocus={() => rememberMove("down")}
               onBlur={() => forgetMove("down")}
@@ -136,13 +138,13 @@ export function TaskItem({
                 if (!pending) onMoveDown();
               }}
             >
-              Down
+              {t.task.down}
             </PixelButton>
           ) : null}
           {done ? null : (
             <PixelButton
               aria-disabled={pending || undefined}
-              aria-label={`Complete ${task.title}`}
+              aria-label={t.task.complete(task.title)}
               className={pending ? "border-ghost-dim text-ghost-dim" : ""}
               onClick={() => {
                 if (pending) return;
@@ -151,7 +153,7 @@ export function TaskItem({
                 onComplete(task.id);
               }}
             >
-              Done
+              {t.task.done}
             </PixelButton>
           )}
         </div>

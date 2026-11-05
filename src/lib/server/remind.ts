@@ -1,4 +1,5 @@
 import { buildNagPrompt, nagLevelFor } from "@/lib/ai/nag";
+import { dictionaryFor } from "@/lib/i18n/dictionaries";
 import { calendarDay } from "@/lib/game/evolution";
 import { hpSpent, type PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
@@ -46,11 +47,12 @@ export async function remind(
   const day = calendarDay(now, pet.timeZone);
   const claimed = await stores.nags.claimDay(stores.userId, day);
   if (!claimed) return false;
-  const body = buildNagPrompt(pet, tasks, nagLevelFor(tasks, now));
+  const level = nagLevelFor(tasks, now);
   for (const subscription of subscriptions) {
+    const locale = subscription.locale ?? "en";
     const result = await deliverPush(subscription, {
-      title: "Haunted Pet To-Do",
-      body,
+      title: dictionaryFor(locale).meta.title,
+      body: buildNagPrompt(pet, tasks, level, locale),
       tag: `nag-${day}`,
     });
     if (result === "gone") {

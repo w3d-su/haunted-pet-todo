@@ -50,6 +50,7 @@ The SQL in `supabase/migrations/` is the schema (`tasks`, `events`, `pet_state`)
 3. Enable **Anonymous sign-ins** in the dashboard (Authentication → Sign In / Providers). A SQL migration cannot toggle that Auth setting. For local `supabase start`, `supabase/config.toml` sets `enable_anonymous_sign_ins = true` (keep that flag if you regenerate the file with `supabase init`).
 4. Apply the migrations: `pnpm db:migrate` (`supabase db push`). `pnpm db:types` regenerates TypeScript types once the CLI is linked. `20261103140204_nag_and_budget.sql` was edited in place after it first shipped. If a local database already applied an older copy of that file, run `supabase db reset` so the advisory lock and `search_path` on those functions are created again.
    Apply the reorder migration before deploying the task sorting UI. The first five filenames use the version IDs recorded in production. For other linked databases previously migrated with short version IDs, compare their applied SQL and reconcile the migration history before running `db push`.
+   Apply `20261105155001_push_locale.sql` before deploying localized push notifications. It adds the locale column and defaults existing subscriptions to English.
 5. Sign in from the browser. Do not proxy this through the server: Supabase limits anonymous sign-ins per IP (30/hour), and a server route would spend that budget on Vercel's address. Turnstile or another captcha is the later hardening step; it is not wired up yet.
 
 ```ts

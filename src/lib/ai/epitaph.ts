@@ -1,5 +1,8 @@
 import { EpitaphResponseSchema } from "@/lib/ai/schemas";
 import { plainEpitaph, quoteForPrompt } from "@/lib/ai/text";
+import { dictionaryFor } from "@/lib/i18n/dictionaries";
+import type { Locale } from "@/lib/i18n/locale";
+import { isTraditionalChinese } from "@/lib/i18n/traditional";
 import { FALLBACK_EPITAPH, type PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 
@@ -7,7 +10,11 @@ import type { Task } from "@/lib/game/tasks";
  * Prompt for a 2–4 line epitaph. Task names are quoted and stripped of
  * quotes and line breaks so they stay inside the list.
  */
-export function buildEpitaphPrompt(pet: PetState, tasks: readonly Task[]): string {
+export function buildEpitaphPrompt(
+  pet: PetState,
+  tasks: readonly Task[],
+  locale: Locale = "en",
+): string {
   const names = tasks
     .filter((task) => task.deletedAt === null && task.status !== "done")
     .map((task) => quoteForPrompt(task.title, 80))
@@ -19,8 +26,11 @@ export function buildEpitaphPrompt(pet: PetState, tasks: readonly Task[]): strin
     `${list}.`,
     "Reference the tasks by name. Keep each line under 40 characters. End with a wry pun. No profanity.",
     `The pet's last stage was ${pet.stage}.`,
+    locale === "zh-TW" ? dictionaryFor(locale).ai.language : "",
     'Return JSON: { "epitaph": "line one\\nline two" }',
-  ].join("\n");
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
 }
 
 /** Accept 2–4 non-empty lines, each at most 40 characters. */
@@ -42,16 +52,22 @@ export async function resolveEpitaph(
   pet: PetState,
   tasks: readonly Task[],
   completeJson: (prompt: string) => Promise<unknown | null>,
+  locale: Locale = "en",
 ): Promise<{ epitaph: string; source: "llm" | "fallback" }> {
-  const raw = await completeJson(buildEpitaphPrompt(pet, tasks));
-  const epitaph =
-    raw !== null && typeof raw === "object" && "epitaph" in raw && typeof raw.epitaph === "string"
-      ? plainEpitaph(raw.epitaph)
-      : raw;
-  const parsed = EpitaphResponseSchema.safeParse(
-    epitaph === raw ? raw : { epitaph },
-  );
-  const text = parsed.success ? normalizeEpitaph(parsed.data.epitaph) : null;
-  if (!text) return { epitaph: FALLBACK_EPITAPH, source: "fallback" };
-  return { epitaph: text, source: "llm" };
+  const attempts = locale === "zh-TW" ? 2 : 1;
+  const fallback = locale === "zh-TW" ? dictionaryFor(locale).epitaph.fallback : FALLBACK_EPITAPH;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const raw = await completeJson(buildEpitaphPrompt(pet, tasks, locale));
+    const epitaph =
+      raw !== null && typeof raw === "object" && "epitaph" in raw && typeof raw.epitaph === "string"
+        ? plainEpitaph(raw.epitaph)
+        : raw;
+    const parsed = EpitaphResponseSchema.safeParse(epitaph === raw ? raw : { epitaph });
+    const text = parsed.success ? normalizeEpitaph(parsed.data.epitaph) : null;
+    if (!text) continue;
+    const titles = tasks.map((task) => quoteForPrompt(task.title, 80));
+    if (locale === "zh-TW" && !isTraditionalChinese(text, titles)) continue;
+    return { epitaph: text, source: "llm" };
+  }
+  return { epitaph: fallback, source: "fallback" };
 }

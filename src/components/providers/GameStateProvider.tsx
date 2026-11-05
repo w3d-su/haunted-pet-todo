@@ -1,9 +1,11 @@
 "use client";
 
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocale } from "@/components/providers/LocaleProvider";
 import { gameRequest, supabaseConfigured } from "./game-request";
 import { petTransitionSound } from "./pet-sound";
 import { useSound } from "@/components/providers/SoundProvider";
+import { en } from "@/lib/i18n/en";
 import { hpSpent, type PetState } from "@/lib/game/pet";
 import type { TaskView } from "@/components/tasks/TaskList";
 import { breakdownFailureIsQuiet } from "@/components/tasks/breakdown-ui";
@@ -78,6 +80,9 @@ export function GameStateProvider({
   children: ReactNode;
 }) {
   const { play } = useSound();
+  const { locale } = useLocale();
+  const localeRef = useRef(locale);
+  localeRef.current = locale;
   const [pet, setPet] = useState<PetState | null>(null);
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [now, setNow] = useState(0);
@@ -90,13 +95,13 @@ export function GameStateProvider({
   const evolveTimer = useRef<number | null>(null);
   const petRef = useRef<PetState | null>(null);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const [petResponse, taskResponse] = await Promise.all([
       gameRequest("/api/pet"),
       gameRequest("/api/tasks"),
     ]);
     if (!petResponse.ok || !taskResponse.ok) {
-      throw new Error("The house is dark. Try again.");
+      throw new Error(en.errors.houseDarkRetry);
     }
     const petBody = (await petResponse.json()) as {
       pet: PetState;
@@ -129,7 +134,7 @@ export function GameStateProvider({
     setNow(petBody.now);
     setClockOffsetMs(petBody.clockOffsetMs);
     setTasks(taskBody.tasks);
-  }
+  }, [play]);
 
   function noticeEvolution(emitted: readonly { type?: string }[] | undefined) {
     if (!emitted?.some((event) => event.type === "PET_EVOLVED")) return;
@@ -147,12 +152,12 @@ export function GameStateProvider({
             method: "POST",
             credentials: "same-origin",
           });
-          if (!session.ok) throw new Error(await failureMessage(session, "Demo mode is locked."));
+          if (!session.ok) throw new Error(await failureMessage(session, en.errors.demoLocked));
         }
         if (!cancelled) await refresh();
         if (!cancelled) setError(null);
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "The house is dark.");
+        if (!cancelled) setError(cause instanceof Error ? cause.message : en.errors.houseDark);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -163,7 +168,7 @@ export function GameStateProvider({
       if (evolveTimer.current !== null) window.clearTimeout(evolveTimer.current);
     };
     // Boot once. Later writes call refresh themselves.
-  }, [demoMode]);
+  }, [demoMode, refresh]);
 
   useEffect(() => {
     if (loading || error) return;
@@ -185,7 +190,7 @@ export function GameStateProvider({
         if (cancelled) return;
         await gameRequest("/api/push", {
           method: "POST",
-          body: JSON.stringify(subscription),
+          body: JSON.stringify({ ...subscription.toJSON(), locale: localeRef.current }),
         });
       } catch (cause) {
         console.error(cause);
@@ -201,13 +206,37 @@ export function GameStateProvider({
     };
   }, [loading, error]);
 
+  useEffect(() => {
+    if (loading || error) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!("serviceWorker" in navigator)) return;
+    let cancelled = false;
+    async function syncPushLocale() {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (cancelled || !subscription) return;
+        await gameRequest("/api/push", {
+          method: "POST",
+          body: JSON.stringify({ ...subscription.toJSON(), locale }),
+        });
+      } catch (cause) {
+        console.error(cause);
+      }
+    }
+    void syncPushLocale();
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, loading, error]);
+
   async function run(action: () => Promise<void>) {
     setPending(true);
     setError(null);
     try {
       await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Something rustled and failed.");
+      setError(cause instanceof Error ? cause.message : en.errors.rustled);
     } finally {
       setPending(false);
     }
@@ -232,7 +261,7 @@ export function GameStateProvider({
           body: JSON.stringify(draft),
         });
         if (!response.ok) {
-          throw new Error(await failureMessage(response, "The task slipped through the floorboards."));
+          throw new Error(await failureMessage(response, en.errors.taskSlipped));
         }
         created = true;
         await refresh();
@@ -248,7 +277,7 @@ export function GameStateProvider({
             method: "PATCH",
             body: JSON.stringify({ id, status: "done" }),
           });
-          if (!response.ok) throw new Error(await failureMessage(response, "That task would not close."));
+          if (!response.ok) throw new Error(await failureMessage(response, en.errors.taskWouldNotClose));
         } catch (cause) {
           // A lost response may still have committed. Restore the UI, then reconcile if online.
           setTasks(tasks);
@@ -267,7 +296,7 @@ export function GameStateProvider({
           body: JSON.stringify({ orderedIds }),
         });
         if (response.status === 409) await refresh();
-        if (!response.ok) throw new Error(await failureMessage(response, "The list would not shuffle."));
+        if (!response.ok) throw new Error(await failureMessage(response, en.errors.listWouldNotShuffle));
         await refresh();
       }),
     rebirth: () =>
@@ -276,7 +305,7 @@ export function GameStateProvider({
           method: "PATCH",
           body: JSON.stringify({ type: "REBIRTH" }),
         });
-        if (!response.ok) throw new Error(await failureMessage(response, "The egg is not ready."));
+        if (!response.ok) throw new Error(await failureMessage(response, en.errors.eggNotReady));
         await refresh();
       }),
     requestBreakdown: (id) =>
@@ -291,10 +320,10 @@ export function GameStateProvider({
             await refresh();
             return;
           }
-          throw new Error(message || "The ghost could not break that down.");
+          throw new Error(message || en.errors.ghostCouldNotBreak);
         }
         if (!response.ok) {
-          throw new Error(await failureMessage(response, "The ghost could not break that down."));
+          throw new Error(await failureMessage(response, en.errors.ghostCouldNotBreak));
         }
         const body = (await response.json()) as { intro?: string };
         await refresh();

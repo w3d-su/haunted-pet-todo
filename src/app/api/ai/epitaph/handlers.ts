@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { resolveEpitaph } from "@/lib/ai/epitaph";
 import { completeJson } from "@/lib/ai/llm";
+import { localeFromHeader } from "@/lib/i18n/locale";
 import { applyPetEvent, FALLBACK_EPITAPH, hpSpent } from "@/lib/game/pet";
 import { serverEnv } from "@/lib/server/env";
 import {
@@ -49,11 +50,13 @@ export async function postEpitaph(request: Request, deps: EpitaphDeps): Promise<
     if (world.pet.status !== "dead" && !hpSpent(world.pet.hp)) {
       return conflict("The pet is still with us");
     }
-    const allowed = await stores.budget.take(stores.userId, deps.now());
     const resolved = await resolveEpitaph(
       world.pet,
       world.tasks,
-      allowed ? deps.completeJson : async () => null,
+      // Every attempt is a model call, so a retry spends budget too.
+      async (prompt) =>
+        (await stores.budget.take(stores.userId, deps.now())) ? deps.completeJson(prompt) : null,
+      localeFromHeader(request.headers.get("x-locale")),
     );
     const reduction = applyPetEvent(
       world.pet,

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { resolveBreakdown } from "@/lib/ai/breakdown";
 import { BREAKDOWN_CLAIM_LOST } from "@/lib/ai/messages";
 import { completeJson } from "@/lib/ai/llm";
+import { dictionaryFor } from "@/lib/i18n/dictionaries";
+import { localeFromHeader } from "@/lib/i18n/locale";
 import type { Task } from "@/lib/game/tasks";
 import { productionDeps } from "@/lib/server/production";
 import {
@@ -28,6 +30,7 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
     if (!stores) return unauthorized();
     const parsed = BreakdownBodySchema.safeParse(await readJson(request));
     if (!parsed.success) return badRequest(parsed.error);
+    const locale = localeFromHeader(request.headers.get("x-locale"));
 
     const world = await syncWorld(
       stores,
@@ -43,7 +46,7 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
     const children = world.tasks.filter((item) => item.parentId === task.id);
     if (children.length > 0) {
       return json({
-        intro: "These steps are already waiting 👻",
+        intro: dictionaryFor(locale).breakdown.already,
         subtasks: children.map((item) => item.title),
         source: "stored",
       });
@@ -54,10 +57,12 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
 
     const created: Task[] = [];
     try {
-      const allowed = await stores.budget.take(stores.userId, deps.now());
       const resolved = await resolveBreakdown(
         claimed,
-        allowed ? deps.completeJson : async () => null,
+        // Every attempt is a model call, so a retry spends budget too.
+        async (prompt) =>
+          (await stores.budget.take(stores.userId, deps.now())) ? deps.completeJson(prompt) : null,
+        locale,
       );
       for (let index = 0; index < resolved.body.subtasks.length; index += 1) {
         const title = resolved.body.subtasks[index];

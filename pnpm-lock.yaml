@@ -20,6 +20,9 @@ importers:
       next:
         specifier: 15.5.28
         version: 15.5.28(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      opencc-js:
+        specifier: 1.0.5
+        version: 1.0.5
       react:
         specifier: 19.3.1
         version: 19.3.1
@@ -1868,6 +1871,9 @@ packages:
   obug@3.0.0:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
     engines: {node: '>=12.20.0'}
+
+  opencc-js@1.0.5:
+    resolution: {integrity: sha512-LD+1SoNnZdlRwtYTjnQdFrSVCAaYpuDqL5CkmOaHOkKoKh7mFxUicLTRVNLU5C+Jmi1vXQ3QL4jWdgSaa4sKjg==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -4126,6 +4132,8 @@ snapshots:
       es-object-atoms: 1.1.2
 
   obug@3.0.0: {}
+
+  opencc-js@1.0.5: {}
 
   optionator@0.9.4:
     dependencies:

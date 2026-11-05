@@ -1,3 +1,4 @@
+import type { Locale } from "@/lib/i18n/locale";
 import type { PetState } from "@/lib/game/pet";
 import type { Task } from "@/lib/game/tasks";
 
@@ -77,6 +78,8 @@ export interface PushSubscription {
   readonly endpoint: string;
   readonly p256dh: string;
   readonly auth: string;
+  /** Absent rows were saved before a language was chosen and stay English. */
+  readonly locale?: Locale;
 }
 
 export interface PushStore {
