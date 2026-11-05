@@ -38,7 +38,7 @@ Vercel Hobby runs the cron in `vercel.json` once a day (`0 8 * * *`). Fluid comp
 
 ## Sound
 
-`public/sfx/task_complete.ogg` and `public/sfx/zombie_spawn.ogg` are original square-wave tones generated with ffmpeg for this project (not third-party recordings). Sound stays muted until the player uses the mute toggle, and playback waits for a pointer or key gesture.
+`public/sfx/task_complete.ogg` and `public/sfx/zombie_spawn.ogg` are original square-wave tones generated with ffmpeg for this project (not third-party recordings). `pet_hurt.ogg` (0.3 s drop), `pet_death.ogg` (1.5 s slide down), `pet_hatch.ogg` (1.0 s C-E-G-C arpeggio), and `pet_evolve.ogg` (1.2 s two-octave run) were made the same way with ffmpeg's `aevalsrc`, as 22050 Hz mono Vorbis. `GameStateProvider` compares each pet read with the previous one and plays at most one of them through `petTransitionSound` in `src/components/providers/pet-sound.ts`: death first, then evolution, hatching, and a hit of at least 1 HP. The first read after page load plays nothing. Sound stays muted until the player uses the mute toggle, and playback waits for a pointer or key gesture.
 
 ## Supabase
 
@@ -102,7 +102,7 @@ HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' 
 
 ## How we used Kiro
 
-`.kiro` is part of the repo: steering files, three specs, and hook definitions. Per the run log, a headless Kiro CLI run drafted the property-test hook and an earlier copy of this section, then `fs_write` and `str_replace` were denied. The text below was applied by hand and checked against the tree. No hook in this list has been exercised in a live Kiro IDE session.
+`.kiro` is part of the repo: steering files, three specs, and hook definitions. Per the run log, a headless Kiro CLI run drafted the property-test hook and an earlier copy of this section, then `fs_write` and `str_replace` were denied. The text below was applied by hand and checked against the tree. On 2026-11-06, `no-date-now-guard` and the `run-property-tests` command were exercised by a headless Kiro CLI 3.0.0 V3 session (details under "What is verified"). No hook has been exercised in the Kiro IDE.
 
 ### Steering files (`.kiro/steering/`)
 
@@ -123,7 +123,7 @@ Each spec is `requirements.md`, `design.md`, and `tasks.md`:
 - `decay-and-time-travel` — `Clock`, `decayStats`, the daily cron, demo fast-forward, Web Push, and property tests P18–P26
 - `task-lifecycle` — tasks, zombies, migrations, the task API, task UI, AI breakdown, and property tests P11–P17
 
-The `tasks.md` boxes were compared with the code. Decay task 6 is ticked because `src/app/api/cron/decay/route.ts` delegates to `runDecayCron` in `handlers.ts` (bearer check, `syncWorld` catch-up, death count, `{ processed, deaths, failures }`). Decay task 16 stays open because 16.3 is still unchecked. Task-lifecycle task 10.5 records the Up/Down buttons and Alt+Arrow reorder. Pet-state-machine task 11b notes that `src/app/api/auth/anonymous/route.ts` was added in `d19675182c14855580acc67eb00359d7be51c527` and removed in `cf11d891cef262ed18180f7e79fca1d80d6bd98a`: that commit's README says a server proxy would spend Supabase's per-IP anonymous sign-in limit on Vercel's address, so `GameStateProvider.tsx` calls `supabase.auth.signInAnonymously()` directly.
+The `tasks.md` boxes were compared with the code. Decay task 6 is ticked because `src/app/api/cron/decay/route.ts` delegates to `runDecayCron` in `handlers.ts` (bearer check, `syncWorld` catch-up, death count, `{ processed, deaths, failures }`). Decay task 16 is ticked because 16.3 was run in Kiro CLI V3 on 2026-11-06. Task-lifecycle task 10.5 records the Up/Down buttons and Alt+Arrow reorder. Pet-state-machine task 11b notes that `src/app/api/auth/anonymous/route.ts` was added in `d19675182c14855580acc67eb00359d7be51c527` and removed in `cf11d891cef262ed18180f7e79fca1d80d6bd98a`: that commit's README says a server proxy would spend Supabase's per-IP anonymous sign-in limit on Vercel's address, so `GameStateProvider.tsx` calls `supabase.auth.signInAnonymously()` directly.
 
 ### Hooks (`.kiro/hooks/`)
 
@@ -160,7 +160,12 @@ Checked in this tree, outside any Kiro IDE session:
 
 Not yet verified:
 
-- Decay-and-time-travel task 16.3: add `Date.now()` to a game file, save it inside a live Kiro IDE session, and watch `no-date-now-guard` fire. The hook has not been exercised there.
-- `run-property-tests.json` has not been exercised in a live Kiro IDE session. The command above was run from the shell only.
+- None of the hooks has been exercised in the Kiro IDE. The Kiro CLI V3 run below is the only live test.
+- `run-game-tests`, `visual-style-check`, and `pet-voice-check` have not been fired by Kiro.
 - There is no Vercel deploy. `product.md` still leaves "Vercel deploy" unchecked.
-- Four sounds listed in `visual-style.md` and `structure.md` are absent from `public/sfx/`: `pet_hurt.ogg`, `pet_death.ogg`, `pet_hatch.ogg`, and `pet_evolve.ogg`. `SoundProvider` only references `task_complete.ogg` and `zombie_spawn.ogg`, which are the files present.
+
+Kiro CLI V3 run (2026-11-06, `kiro-cli chat --v3 --no-interactive --trust-all-tools` in the repo root, Windows):
+
+- Kiro sends `{"hook_event_name":"PostFileSave","cwd":...,"file_path":...}` on stdin and leaves `{{filePath}}` unexpanded. `no-date-now-guard.mjs` first missed the top-level `file_path` and exited 0 with "no file path". It now reads that field. An agent edit that added `Date.now()` to `src/lib/game/clock.ts` then exited 1 with `clock.ts:5 src/lib/game must not use Date.now()` on stderr, and the edit that removed it exited 0.
+- The `run-property-tests` command, fired by an agent edit to `src/lib/game/constants.ts`, exited 0 with 2 files and 30 tests passed. The same run exited 1 when `pnpm` was not on `PATH`. Run `corepack enable` so the `pnpm` hooks can start.
+- Kiro discards hook stdout for `PostFileSave`, and the agent saw no hook text. Exit codes and stderr were captured by a temporary logging hook that ran the same commands with the same stdin. That hook was then deleted.

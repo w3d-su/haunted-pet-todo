@@ -130,11 +130,11 @@
 
 ## Week 4 (Nov 23–30): Polish, Accessibility, Final Tests
 
-- [ ] 16. (Week 4) Fix and verify `no-date-now-guard` hook
+- [x] 16. (Week 4) Fix and verify `no-date-now-guard` hook
   - [x] 16.1 Confirm hook reads file path from stdin JSON (`event.file_path`) via Node, not `$KIRO_FILE_PATH`
   - [x] 16.2 Confirm violation message is written to stderr (exit 1) not stdout
-  - [ ] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output. Still needs a live test in Kiro.
-    - Files: `.kiro/hooks/no-date-now-guard.json`
+  - [x] 16.3 Manually test hook by temporarily adding `Date.now()` to a game file, saving, and observing hook output. Done 2026-11-06 with Kiro CLI 3.0.0 (`kiro-cli chat --v3 --no-interactive`) started in the repo root. Kiro V3 passed `{{filePath}}` through unexpanded and sent `file_path` at the top level of the stdin JSON, not under `event`, so the script warned "no file path" and exited 0. After the script also read top-level `file_path`, adding `Date.now()` to `src/lib/game/clock.ts` exited 1 with `clock.ts:5 src/lib/game must not use Date.now()` on stderr, and removing it exited 0. Kiro discards hook stdout for `PostFileSave` and the agent saw no hook text, so the exit code and stderr were captured by a temporary logging hook that ran the same script with the same stdin.
+    - Files: `.kiro/hooks/no-date-now-guard.json`, `.kiro/hooks/no-date-now-guard.mjs`
   _Requirements: 2.1, 2.2_
 
 - [x] 17. (Week 4) Accessibility and UX for DemoControls
