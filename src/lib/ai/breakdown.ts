@@ -58,8 +58,14 @@ function parseBreakdown(raw: unknown): BreakdownResponse | null {
   return parsed.success ? parsed.data : null;
 }
 
-function breakdownIsTraditional(body: BreakdownResponse): boolean {
-  return isTraditionalChinese([body.intro, ...body.subtasks].join("\n"));
+function breakdownIsTraditional(
+  body: BreakdownResponse,
+  task: Pick<Task, "title" | "notes">,
+): boolean {
+  return isTraditionalChinese([body.intro, ...body.subtasks].join("\n"), [
+    quoteForPrompt(task.title, 120),
+    quoteForPrompt(task.notes ?? "", 200),
+  ]);
 }
 
 export async function resolveBreakdown(
@@ -71,7 +77,7 @@ export async function resolveBreakdown(
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const body = parseBreakdown(await completeJson(buildBreakdownPrompt(task, locale)));
     if (!body) continue;
-    if (locale === "zh-TW" && !breakdownIsTraditional(body)) continue;
+    if (locale === "zh-TW" && !breakdownIsTraditional(body, task)) continue;
     return { body, source: "llm" };
   }
   return { body: fallbackBreakdown(task, locale), source: "fallback" };

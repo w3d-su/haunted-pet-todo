@@ -57,10 +57,11 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
 
     const created: Task[] = [];
     try {
-      const allowed = await stores.budget.take(stores.userId, deps.now());
       const resolved = await resolveBreakdown(
         claimed,
-        allowed ? deps.completeJson : async () => null,
+        // Every attempt is a model call, so a retry spends budget too.
+        async (prompt) =>
+          (await stores.budget.take(stores.userId, deps.now())) ? deps.completeJson(prompt) : null,
         locale,
       );
       for (let index = 0; index < resolved.body.subtasks.length; index += 1) {

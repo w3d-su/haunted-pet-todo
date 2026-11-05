@@ -144,3 +144,38 @@ it("stores a valid model epitaph", async () => {
   expect(world.pets.get(USER_ID)?.state.currentEpitaph).toBe(verse);
   expect(world.events.some((event) => event.eventType === "EPITAPH_READY")).toBe(true);
 });
+
+it("spends budget on the zh-TW retry and stops when none is left", async () => {
+  const world = createMemoryWorld();
+  deadPet(world);
+  let calls = 0;
+  let takes = 0;
+  const base = deps(world, {
+    completeJson: async () => {
+      calls += 1;
+      return { epitaph: "Here lies Spooky,\nslain by emails" };
+    },
+  });
+  const incoming = request("POST", "/api/ai/epitaph", {});
+  incoming.headers.set("x-locale", "zh-TW");
+  const response = await postEpitaph(incoming, {
+    ...base,
+    authorize: async (authed) => {
+      const stores = await base.authorize(authed);
+      if (!stores) return null;
+      return {
+        ...stores,
+        budget: {
+          take: async () => {
+            takes += 1;
+            return takes === 1;
+          },
+        },
+      };
+    },
+  });
+  expect(response.status).toBe(200);
+  expect(takes).toBe(2);
+  expect(calls).toBe(1);
+  expect(((await response.json()) as { source: string }).source).toBe("fallback");
+});

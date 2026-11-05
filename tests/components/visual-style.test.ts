@@ -18,7 +18,7 @@ function fontViolations(css: string, allowDateField: boolean): string[] {
     const family = line.match(/font-family:\s*([^;]+)/);
     if (!family) continue;
     const value = family[1] ?? "";
-    if (value.includes("Press Start")) continue;
+    if (value.includes("Press Start") || value.includes("--font-press-start")) continue;
     const dateException =
       allowDateField &&
       media.replace(/\s/g, "") === "max-width:389px" &&

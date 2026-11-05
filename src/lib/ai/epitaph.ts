@@ -65,7 +65,8 @@ export async function resolveEpitaph(
     const parsed = EpitaphResponseSchema.safeParse(epitaph === raw ? raw : { epitaph });
     const text = parsed.success ? normalizeEpitaph(parsed.data.epitaph) : null;
     if (!text) continue;
-    if (locale === "zh-TW" && !isTraditionalChinese(text)) continue;
+    const titles = tasks.map((task) => quoteForPrompt(task.title, 80));
+    if (locale === "zh-TW" && !isTraditionalChinese(text, titles)) continue;
     return { epitaph: text, source: "llm" };
   }
   return { epitaph: fallback, source: "fallback" };

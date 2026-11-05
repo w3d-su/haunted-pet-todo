@@ -162,3 +162,43 @@ it("does not treat a lost claim as an error the player should see", () => {
   expect(breakdownFailureIsQuiet(409, "A done task cannot be broken down")).toBe(false);
   expect(breakdownFailureIsQuiet(500, BREAKDOWN_CLAIM_LOST)).toBe(false);
 });
+
+it("spends budget on the zh-TW retry and stops when none is left", async () => {
+  const world = createMemoryWorld();
+  const { postTask } = await import("@/app/api/tasks/handlers");
+  const created = await postTask(
+    request("POST", "/api/tasks", { title: "Plan the move", size: "large" }),
+    world.deps(USER_ID, NOW),
+  );
+  const task = ((await created.json()) as { task: { id: string } }).task;
+  let calls = 0;
+  let takes = 0;
+  const base = deps(world, {
+    completeJson: async () => {
+      calls += 1;
+      return { intro: "Boo", subtasks: ["Pack the boxes", "Call the movers", "Clean the house"] };
+    },
+  });
+  const incoming = request("POST", "/api/ai/breakdown", { taskId: task.id });
+  incoming.headers.set("x-locale", "zh-TW");
+  const response = await postBreakdown(incoming, {
+    ...base,
+    authorize: async (authed) => {
+      const stores = await base.authorize(authed);
+      if (!stores) return null;
+      return {
+        ...stores,
+        budget: {
+          take: async () => {
+            takes += 1;
+            return takes === 1;
+          },
+        },
+      };
+    },
+  });
+  expect(response.status).toBe(200);
+  expect(takes).toBe(2);
+  expect(calls).toBe(1);
+  expect(((await response.json()) as { source: string }).source).toBe("fallback");
+});
