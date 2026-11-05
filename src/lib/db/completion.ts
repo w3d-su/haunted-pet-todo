@@ -29,7 +29,7 @@ export async function commitCompletion(
       category: input.task.category,
       size: input.task.size,
       due_at: input.task.dueAt === null ? null : new Date(input.task.dueAt).toISOString(),
-      sort_order: input.task.sortOrder,
+      sort_order: input.sortOrder,
     },
     p_pet: petStateToRow(input.pet),
     p_events: input.events.map((event) => ({

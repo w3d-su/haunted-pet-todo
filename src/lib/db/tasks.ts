@@ -162,10 +162,12 @@ export async function clampStoredTaskTimes(
 }
 
 /** Field update that cannot overwrite a done task. */
-export async function updateOpen(supabase: SupabaseClient, task: Task): Promise<Task | null> {
+export async function updateOpen(supabase: SupabaseClient, task: Task, sortOrder?: number): Promise<Task | null> {
+  const row = taskToRow(task);
+  if (sortOrder === undefined) delete row.sort_order;
   const { data, error } = await supabase
     .from("tasks")
-    .update(taskToRow(task))
+    .update(row)
     .eq("id", task.id)
     .eq("user_id", task.userId)
     .neq("status", "done")
@@ -175,6 +177,19 @@ export async function updateOpen(supabase: SupabaseClient, task: Task): Promise<
   throwOnError(error);
   if (!data) return null;
   return taskFromRow(data);
+}
+
+export async function reorderTasks(
+  supabase: SupabaseClient,
+  userId: string,
+  orderedIds: readonly string[],
+): Promise<boolean> {
+  const { data, error } = await supabase.rpc("reorder_tasks", {
+    p_user_id: userId,
+    p_ordered_ids: orderedIds,
+  });
+  throwOnError(error);
+  return data === true;
 }
 
 /** One winner. A done task, or a task already claimed, returns null. */
