@@ -109,7 +109,7 @@ HAUNTED_TEST_DATABASE_URL='postgresql:///haunted_test?host=/var/run/postgresql' 
 
 | File | Inclusion | What it contains |
 |---|---|---|
-| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions, habitual-time Web Push, the CRT-and-sound line, and Vercel deploy. |
+| `product.md` | `always` | Vision, game loop, and the MVP checklist. Still open: reminder-time suggestions, habitual-time Web Push, and the CRT-and-sound line. |
 | `tech.md` | `always` | Stack, commands, and the coding rules: injectable clock, Zod at boundaries, server-only model calls, RLS, env vars, and accessibility. |
 | `structure.md` | `always` | Directory layout and layer rules. |
 | `build-order.md` | `always` | Week-by-week order across the three specs, naming the file each task owns. |
@@ -163,7 +163,7 @@ Not yet verified:
 
 - None of the hooks has been exercised in the Kiro IDE. The Kiro CLI V3 run below is the only live test.
 - `run-game-tests`, `visual-style-check`, and `pet-voice-check` have not been fired by Kiro.
-- There is no Vercel deploy. `product.md` still leaves "Vercel deploy" unchecked.
+- Production is <https://haunted-pet-todo.vercel.app>, deployed by the Vercel GitHub integration from `main`. On 2026-11-06 it served `55ac1a7` with all six `public/sfx/` files, `/api/pet` and `/api/cron/decay` returned 401 without credentials, the client bundle pointed at a Supabase project, and PostgREST reported `permission denied for function reorder_tasks` (so migration 0006 exists there). Nobody has played through the deployed app end to end.
 
 Kiro CLI V3 run (2026-11-06, `kiro-cli chat --v3 --no-interactive --trust-all-tools` in the repo root, Windows):
 
