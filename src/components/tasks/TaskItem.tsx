@@ -97,9 +97,9 @@ export function TaskItem({
         animate={{ opacity: flash && !reduced ? [0, 0.45, 0] : 0 }}
         transition={reduced ? { duration: 0 } : { type: "tween", duration: 0.15, ease: "easeOut" }}
       />
-      <div className="relative flex items-start justify-between gap-3">
-        <div>
-          <p className={`text-[10px] leading-relaxed text-ghost-white ${done ? "line-through" : ""}`}>
+      <div className="relative flex flex-col items-start gap-3 sm:flex-row sm:justify-between">
+        <div className="min-w-0 flex-1">
+          <p className={`text-[10px] leading-relaxed text-ghost-white [overflow-wrap:anywhere] ${done ? "line-through" : ""}`}>
             {task.title}
           </p>
           <p className={`mt-2 text-[8px] uppercase leading-relaxed ${badge[task.status]}`}>

@@ -46,7 +46,7 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
           <p className="mt-6 text-[10px] leading-relaxed text-ghost-dim">The spirit is listening…</p>
         ) : null}
         {game.error ? (
-          <p className="mt-4 text-[10px] leading-relaxed text-blood" role="alert">
+          <p className="mt-4 text-[10px] leading-relaxed text-blood-text" role="alert">
             Error: {game.error}
           </p>
         ) : null}

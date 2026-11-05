@@ -127,7 +127,7 @@ export function TaskForm({
         />
         Already late
       </label>
-      {error ? <p className="text-[8px] leading-relaxed text-blood">{error}</p> : null}
+      {error ? <p className="text-[8px] leading-relaxed text-blood-text">{error}</p> : null}
       <PixelButton type="submit" disabled={pending}>
         Add task
       </PixelButton>

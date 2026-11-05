@@ -32,8 +32,9 @@ Use only these colors. Define them as Tailwind CSS custom properties in `tailwin
 | `--color-pumpkin-dark` | `#a34f00` | Button pressed / hover darken |
 | `--color-slime` | `#4caf50` | Task complete, Hunger bar, positive feedback |
 | `--color-slime-dark` | `#2e7d32` | Slime hover/pressed |
-| `--color-blood` | `#c0392b` | Damage, overdue indicator, HP bar (critical) |
+| `--color-blood` | `#e74c3c` | Damage, overdue indicator, HP bar (critical) |
 | `--color-blood-dark` | `#922b21` | Deep damage pulse |
+| `--color-blood-text` | `#ef6a5b` | Error text. Lighter than `--color-blood` so it clears WCAG AA on `--color-bg-panel-raised` |
 | `--color-mood-purple` | `#9b59b6` | Mood bar fill |
 | `--color-bone` | `#f5e6c8` | Tombstone text, epitaph |
 | `--color-scanline` | `rgba(0,0,0,0.18)` | CRT scanline stripe color |
@@ -54,6 +55,7 @@ Use only these colors. Define them as Tailwind CSS custom properties in `tailwin
 
 - Line height for Press Start 2P: `leading-relaxed` (it needs room — the font has no descenders but feels cramped at tight leading).
 - Do not use any other fonts. No system fonts except as a fallback stack after Press Start 2P.
+- Exception: below 389px, `input[type="datetime-local"]` in `src/app/globals.css` uses `ui-sans-serif, system-ui, sans-serif` at 14px. Press Start 2P clips the AM/PM segment there and the picker icon overlaps the text. At 390px and wider the field returns to Press Start 2P. The visual-style check must not flag this rule.
 - Minimum rendered font size: 8px. Never smaller.
 - Text contrast: all text on dark backgrounds must pass WCAG AA (4.5:1). Ghost-white `#e8e0f0` on void `#0d0a1a` = ~14:1 ✅.
 
