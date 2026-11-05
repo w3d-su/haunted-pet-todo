@@ -30,7 +30,8 @@ export interface TaskStore {
    * Field update, including overdue → todo when the due time moves forward.
    * Returns null when the stored row is already done.
    */
-  updateOpen(task: Task): Promise<Task | null>;
+  updateOpen(task: Task, sortOrder?: number): Promise<Task | null>;
+  reorder(userId: string, orderedIds: readonly string[]): Promise<boolean>;
   softDeleteTask(taskId: string, userId: string, now: number): Promise<Task | null>;
   /**
    * Set `breakdownSuggested` only while it is false and the task is not done.
@@ -42,6 +43,7 @@ export interface TaskStore {
 }
 
 export interface CompletionCommit {
+  readonly sortOrder?: number;
   readonly task: Task;
   readonly expectedVersion: number;
   readonly pet: PetState;

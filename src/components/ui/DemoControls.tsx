@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import { gameRequest } from "@/components/providers/game-request";
 import { PixelButton } from "@/components/ui/PixelButton";
 
 const ACTIONS = [
@@ -40,10 +41,8 @@ export function DemoControls({
     setPending(key);
     setError(null);
     try {
-      const response = await fetch("/api/demo/fast-forward", {
+      const response = await gameRequest("/api/demo/fast-forward", {
         method: "POST",
-        credentials: "same-origin",
-        headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!response.ok) {

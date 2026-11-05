@@ -26,6 +26,7 @@ import {
   claimBreakdown,
   getTasks,
   releaseBreakdown,
+  reorderTasks,
   markOverdue,
   softDeleteTask,
   updateOpen,
@@ -74,7 +75,8 @@ function pgDeps(pool: Pool): AppDeps {
         getTasks: (id) => getTasks(supabase, id),
         upsertTask: (task) => upsertTask(supabase, task),
         markOverdue: (taskId, id) => markOverdue(supabase, taskId, id),
-        updateOpen: (task) => updateOpen(supabase, task),
+        updateOpen: (task, sortOrder) => updateOpen(supabase, task, sortOrder),
+        reorder: (id, orderedIds) => reorderTasks(supabase, id, orderedIds),
         softDeleteTask: (taskId, id, now) => softDeleteTask(supabase, taskId, id, now),
         claimBreakdown: (taskId, id) => claimBreakdown(supabase, taskId, id),
         releaseBreakdown: (taskId, id) => releaseBreakdown(supabase, taskId, id),
@@ -130,6 +132,29 @@ describeDb("postgres concurrency", () => {
     );
     expect(saved).not.toBeNull();
   }
+
+  it("reorders completed and open roots atomically and rejects stale or duplicate IDs", async () => {
+    await resetRows();
+    const deps = pgDeps(pool);
+    const ids: string[] = [];
+    for (const title of ["First", "Second"]) {
+      const response = await postTask(request("POST", "/api/tasks", { title }), deps);
+      ids.push((await response.json()).task.id);
+    }
+    const [first, second] = ids;
+    await patchTask(request("PATCH", "/api/tasks", { id: first, status: "done" }), deps);
+    await postTask(request("POST", "/api/tasks", { title: "Child", parentId: first }), deps);
+    const reorder = (orderedIds: string[]) =>
+      patchTask(request("PATCH", "/api/tasks", { orderedIds }), deps);
+    expect((await reorder([second, first])).status).toBe(200);
+    expect((await reorder([first, crypto.randomUUID()])).status).toBe(409);
+    expect((await reorder([first, first])).status).toBe(400);
+    const rows = await getTasks(supabase, USER_ID);
+    rows.sort((a, b) => a.sortOrder - b.sortOrder);
+    expect(rows.map((row) => [row.title, row.status, row.sortOrder])).toEqual([
+      ["Second", "todo", 1], ["First", "done", 2], ["Child", "todo", 3],
+    ]);
+  });
 
   it("completes the same task 20 times concurrently: one 200, nineteen 409s, no 500s", async () => {
     await resetRows();

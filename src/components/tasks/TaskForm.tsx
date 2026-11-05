@@ -31,7 +31,7 @@ export function TaskForm({
 }: {
   pending: boolean;
   now: number;
-  onCreate: (draft: TaskDraft) => Promise<void>;
+  onCreate: (draft: TaskDraft) => Promise<boolean>;
 }) {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<(typeof TASK_CATEGORIES)[number]>("chores");
@@ -53,7 +53,7 @@ export function TaskForm({
       return;
     }
     setError(null);
-    await onCreate(parsed.data);
+    if (!(await onCreate(parsed.data))) return;
     setTitle("");
     setDue("");
     setLate(false);
