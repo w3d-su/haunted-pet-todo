@@ -46,6 +46,10 @@ const PatchTaskBodySchema = z
   })
   .strict();
 
+const ReorderTasksSchema = z.object({
+  orderedIds: z.array(z.uuid()).min(1).refine((ids) => new Set(ids).size === ids.length),
+}).strict();
+
 const DeleteTaskBodySchema = z.object({ id: z.uuid() }).strict();
 
 export interface TaskNode extends Task {
@@ -147,7 +151,14 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
   try {
     const stores = await authed(request, deps);
     if (stores instanceof Response) return stores;
-    const parsed = PatchTaskBodySchema.safeParse(await readJson(request));
+    const body = await readJson(request);
+    if (body && typeof body === "object" && "orderedIds" in body) {
+      const order = ReorderTasksSchema.safeParse(body);
+      if (!order.success) return badRequest(order.error);
+      const saved = await stores.tasks.reorder(stores.userId, order.data.orderedIds);
+      return saved ? json({ ok: true }) : conflict("The task list changed. Refresh and try again.");
+    }
+    const parsed = PatchTaskBodySchema.safeParse(body);
     if (!parsed.success) return badRequest(parsed.error);
 
     const existing = (await stores.tasks.getTasks(stores.userId)).find(
@@ -195,7 +206,7 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
       }
     }
 
-    const saved = await stores.tasks.updateOpen(next);
+    const saved = await stores.tasks.updateOpen(next, parsed.data.sortOrder);
     if (!saved) return conflict("Done tasks cannot be edited");
     return json({ task: saved });
   } catch (error) {
@@ -268,6 +279,7 @@ async function completeTask(
     ];
     const result = await stores.commitCompletion({
       task: { ...task, status: known?.status ?? task.status, completedAt: now },
+      sortOrder: patch.sortOrder,
       expectedVersion: version,
       pet: reduction.state,
       events,

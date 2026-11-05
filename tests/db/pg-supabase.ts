@@ -248,6 +248,13 @@ export function createPgSupabase(pool: Pool): SupabaseClient {
       return new Query(pool, table);
     },
     async rpc(fn: string, args: Record<string, unknown> = {}) {
+      if (fn === "reorder_tasks") {
+        const result = await pool.query(
+          "select public.reorder_tasks($1::uuid, $2::uuid[]) as ok",
+          [args.p_user_id, args.p_ordered_ids],
+        );
+        return { data: result.rows[0]?.ok, error: null };
+      }
       if (fn === "take_ai_budget") {
         try {
           const result = await pool.query(

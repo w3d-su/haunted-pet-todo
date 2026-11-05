@@ -106,13 +106,25 @@ export function createMemoryWorld(): MemoryWorld {
       tasks[index] = overdue;
       return overdue;
     },
-    async updateOpen(task) {
+    async updateOpen(task, sortOrder) {
       const index = tasks.findIndex((item) => item.id === task.id && item.userId === task.userId);
       const current = tasks[index];
       if (!current || current.deletedAt !== null || current.status === "done") return null;
-      const stored = persistTask(task);
+      const stored = persistTask({ ...task, sortOrder: sortOrder ?? current.sortOrder });
       tasks[index] = stored;
       return stored;
+    },
+    async reorder(userId, orderedIds) {
+      const live = tasks.filter((task) => task.userId === userId && task.deletedAt === null);
+      const liveIds = new Set(live.map((task) => task.id));
+      const roots = live.filter((task) => !task.parentId || !liveIds.has(task.parentId));
+      const positions = new Map(orderedIds.map((id, index) => [id, index + 1]));
+      if (roots.length !== orderedIds.length || roots.some((task) => !positions.has(task.id))) return false;
+      tasks.forEach((task, index) => {
+        const sortOrder = positions.get(task.id);
+        if (sortOrder !== undefined) tasks[index] = { ...task, sortOrder };
+      });
+      return true;
     },
     async softDeleteTask(taskId, userId, now) {
       const index = tasks.findIndex((item) => item.id === taskId && item.userId === userId);
@@ -223,6 +235,7 @@ export function createMemoryWorld(): MemoryWorld {
     }
     const done = persistTask({
       ...input.task,
+      sortOrder: input.sortOrder ?? current.sortOrder,
       status: "done",
       completedAt: input.task.completedAt,
     });

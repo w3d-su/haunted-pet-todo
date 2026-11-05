@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useLocale } from "@/components/providers/LocaleProvider";
+import { gameRequest, supabaseConfigured } from "./game-request";
 import { useSound } from "@/components/providers/SoundProvider";
 import { en } from "@/lib/i18n/en";
 import { hpSpent, type PetState } from "@/lib/game/pet";
@@ -20,7 +21,7 @@ interface GameValue {
   evolving: boolean;
   breakdownLine: string | null;
   refresh: () => Promise<void>;
-  createTask: (draft: TaskDraft) => Promise<void>;
+  createTask: (draft: TaskDraft) => Promise<boolean>;
   completeTask: (id: string) => Promise<void>;
   reorder: (orderedIds: readonly string[]) => Promise<void>;
   rebirth: () => Promise<void>;
@@ -70,32 +71,6 @@ async function failureMessage(response: Response, fallback: string): Promise<str
   return fallback;
 }
 
-function supabaseConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-}
-
-/** Throws when sign-in fails. Callers must not fall through to the memory demo. */
-async function bearerFromSupabase(): Promise<Record<string, string>> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) return {};
-  const { createClient } = await import("@supabase/supabase-js");
-  const supabase = createClient(url, key, {
-    auth: { persistSession: true, autoRefreshToken: true },
-  });
-  const existing = await supabase.auth.getSession();
-  let token = existing.data.session?.access_token;
-  if (!token) {
-    const signed = await supabase.auth.signInAnonymously();
-    token = signed.data.session?.access_token;
-    if (signed.error || !token) {
-      if (signed.error) console.error(signed.error);
-      throw new Error(en.errors.signInFailed);
-    }
-  }
-  return { Authorization: `Bearer ${token}` };
-}
-
 export function GameStateProvider({
   demoMode,
   children,
@@ -116,22 +91,12 @@ export function GameStateProvider({
   const [error, setError] = useState<string | null>(null);
   const [evolving, setEvolving] = useState(false);
   const [breakdownLine, setBreakdownLine] = useState<string | null>(null);
-  const headersRef = useRef<Record<string, string>>({});
   const evolveTimer = useRef<number | null>(null);
-
-  async function authed(path: string, init?: RequestInit): Promise<Response> {
-    const headers = new Headers(init?.headers);
-    for (const [key, value] of Object.entries(headersRef.current)) headers.set(key, value);
-    if (init?.body && !headers.has("content-type")) headers.set("content-type", "application/json");
-    headers.set("x-time-zone", Intl.DateTimeFormat().resolvedOptions().timeZone);
-    headers.set("x-locale", localeRef.current);
-    return fetch(path, { ...init, headers, credentials: "same-origin" });
-  }
 
   async function refresh() {
     const [petResponse, taskResponse] = await Promise.all([
-      authed("/api/pet"),
-      authed("/api/tasks"),
+      gameRequest("/api/pet"),
+      gameRequest("/api/tasks"),
     ]);
     if (!petResponse.ok || !taskResponse.ok) {
       throw new Error(en.errors.houseDarkRetry);
@@ -151,7 +116,7 @@ export function GameStateProvider({
     ) {
       epitaphTried.add(deathKey);
       try {
-        const epitaph = await authed("/api/ai/epitaph", { method: "POST", body: "{}" });
+        const epitaph = await gameRequest("/api/ai/epitaph", { method: "POST", body: "{}" });
         if (epitaph.ok) {
           const carved = (await epitaph.json()) as { pet?: PetState };
           if (carved.pet) nextPet = carved.pet;
@@ -177,9 +142,7 @@ export function GameStateProvider({
     let cancelled = false;
     async function boot() {
       try {
-        if (supabaseConfigured()) {
-          headersRef.current = await bearerFromSupabase();
-        } else if (demoMode) {
+        if (!supabaseConfigured() && demoMode) {
           const session = await fetch("/api/demo/session", {
             method: "POST",
             credentials: "same-origin",
@@ -200,7 +163,6 @@ export function GameStateProvider({
       if (evolveTimer.current !== null) window.clearTimeout(evolveTimer.current);
     };
     // Boot once. Later writes call refresh themselves.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [demoMode]);
 
   useEffect(() => {
@@ -221,7 +183,7 @@ export function GameStateProvider({
             applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
           }));
         if (cancelled) return;
-        await authed("/api/push", {
+        await gameRequest("/api/push", {
           method: "POST",
           body: JSON.stringify({ ...subscription.toJSON(), locale: localeRef.current }),
         });
@@ -249,7 +211,7 @@ export function GameStateProvider({
         const registration = await navigator.serviceWorker.getRegistration("/sw.js");
         const subscription = await registration?.pushManager.getSubscription();
         if (cancelled || !subscription) return;
-        await authed("/api/push", {
+        await gameRequest("/api/push", {
           method: "POST",
           body: JSON.stringify({ ...subscription.toJSON(), locale }),
         });
@@ -286,25 +248,37 @@ export function GameStateProvider({
     evolving,
     breakdownLine,
     refresh: () => run(refresh),
-    createTask: (draft) =>
-      run(async () => {
-        const response = await authed("/api/tasks", {
+    createTask: async (draft) => {
+      let created = false;
+      await run(async () => {
+        const response = await gameRequest("/api/tasks", {
           method: "POST",
           body: JSON.stringify(draft),
         });
         if (!response.ok) {
           throw new Error(await failureMessage(response, en.errors.taskSlipped));
         }
+        created = true;
         await refresh();
-      }),
+      });
+      return created;
+    },
     completeTask: (id) =>
       run(async () => {
         setTasks((current) => markDone(current, id));
-        const response = await authed("/api/tasks", {
-          method: "PATCH",
-          body: JSON.stringify({ id, status: "done" }),
-        });
-        if (!response.ok) throw new Error(await failureMessage(response, en.errors.taskWouldNotClose));
+        let response: Response;
+        try {
+          response = await gameRequest("/api/tasks", {
+            method: "PATCH",
+            body: JSON.stringify({ id, status: "done" }),
+          });
+          if (!response.ok) throw new Error(await failureMessage(response, en.errors.taskWouldNotClose));
+        } catch (cause) {
+          // A lost response may still have committed. Restore the UI, then reconcile if online.
+          setTasks(tasks);
+          await refresh().catch(() => {});
+          throw cause;
+        }
         play("task_complete");
         const body = (await response.json()) as { emitted?: { type: string }[]; pet?: PetState };
         if (!body.pet || !hpSpent(body.pet.hp)) noticeEvolution(body.emitted);
@@ -312,25 +286,17 @@ export function GameStateProvider({
       }),
     reorder: (orderedIds) =>
       run(async () => {
-        const sortById = new Map(tasks.map((task) => [task.id, task.sortOrder]));
-        let changed = false;
-        for (let index = 0; index < orderedIds.length; index += 1) {
-          const id = orderedIds[index];
-          if (!id) continue;
-          const sortOrder = index + 1;
-          if (sortById.get(id) === sortOrder) continue;
-          changed = true;
-          const response = await authed("/api/tasks", {
-            method: "PATCH",
-            body: JSON.stringify({ id, sortOrder }),
-          });
-          if (!response.ok) throw new Error(await failureMessage(response, en.errors.listWouldNotShuffle));
-        }
-        if (changed) await refresh();
+        const response = await gameRequest("/api/tasks", {
+          method: "PATCH",
+          body: JSON.stringify({ orderedIds }),
+        });
+        if (response.status === 409) await refresh();
+        if (!response.ok) throw new Error(await failureMessage(response, en.errors.listWouldNotShuffle));
+        await refresh();
       }),
     rebirth: () =>
       run(async () => {
-        const response = await authed("/api/pet", {
+        const response = await gameRequest("/api/pet", {
           method: "PATCH",
           body: JSON.stringify({ type: "REBIRTH" }),
         });
@@ -339,7 +305,7 @@ export function GameStateProvider({
       }),
     requestBreakdown: (id) =>
       run(async () => {
-        const response = await authed("/api/ai/breakdown", {
+        const response = await gameRequest("/api/ai/breakdown", {
           method: "POST",
           body: JSON.stringify({ taskId: id }),
         });
