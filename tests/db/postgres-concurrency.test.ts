@@ -8,6 +8,7 @@
  * requires `select current_database()` to return a name containing `test`.
  * If the URL is unset, the suite skips so `pnpm test` stays green.
  */
+import { BREAKDOWN_CLAIM_LOST } from "@/lib/ai/messages";
 import { Pool } from "pg";
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { postBreakdown } from "@/app/api/ai/breakdown/handlers";
@@ -250,13 +251,24 @@ describeDb("postgres concurrency", () => {
         }),
       ),
     );
-    const statuses = responses.map((response) => response.status);
-    expect(statuses.filter((status) => status === 200)).toHaveLength(1);
-    expect(statuses.filter((status) => status === 409)).toHaveLength(5);
-    const children = await pool.query("select title from public.tasks where parent_id = $1", [
-      task.id,
-    ]);
-    expect(children.rows.length).toBeGreaterThanOrEqual(3);
-    expect(children.rows.length).toBeLessThanOrEqual(7);
+    // A late reader can replay stored steps with a 200; only the winner generates them.
+    const generated: string[][] = [];
+    for (const response of responses) {
+      const body = await response.json();
+      if (response.status === 409) {
+        expect(body.error).toBe(BREAKDOWN_CLAIM_LOST);
+        continue;
+      }
+      expect(response.status).toBe(200);
+      if (body.source === "fallback") generated.push(body.subtasks);
+      else expect(body.source).toBe("stored");
+    }
+    expect(generated).toHaveLength(1);
+    expect(generated[0]).toHaveLength(3);
+    const children = await pool.query(
+      "select title from public.tasks where parent_id = $1 order by sort_order",
+      [task.id],
+    );
+    expect(children.rows.map((row) => row.title)).toEqual(generated[0]);
   });
 });
