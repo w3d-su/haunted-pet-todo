@@ -67,7 +67,14 @@ function pathFromStdin(raw) {
     return "";
   }
   const event = payload?.event;
-  return usable(event?.file_path) || usable(event?.filePath) || usable(payload?.filePath) || "";
+  // Kiro CLI V3 sends { hook_event_name, cwd, file_path } at the top level.
+  return (
+    usable(payload?.file_path) ||
+    usable(event?.file_path) ||
+    usable(event?.filePath) ||
+    usable(payload?.filePath) ||
+    ""
+  );
 }
 
 async function readStdin() {
