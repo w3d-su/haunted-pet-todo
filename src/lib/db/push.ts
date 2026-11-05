@@ -17,7 +17,7 @@ const PushRowSchema = BaseRowSchema.extend({
 type DbError = { message?: string; code?: string } | null;
 
 /**
- * True when this database has not applied `0006_push_locale.sql` yet.
+ * True when this database has not applied `20261105155001_push_locale.sql` yet.
  * A deploy can then keep saving subscriptions in English.
  */
 export function missingLocaleColumn(error: DbError): boolean {
