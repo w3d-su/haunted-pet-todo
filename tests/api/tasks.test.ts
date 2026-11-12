@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { deleteTask, getTasksRoute, patchTask, postTask } from "@/app/api/tasks/handlers";
-import { MAX_HP } from "@/lib/game/constants";
+import { DECAY_RATE_HP, MAX_HP } from "@/lib/game/constants";
 import { initialPetState } from "@/lib/game/pet";
 import { SystemClock } from "@/lib/server/clock";
 import type { AppDeps } from "@/lib/server/stores";
@@ -355,7 +355,7 @@ it("catches the pet up on read using the stored clock offset", async () => {
     version: 1,
   });
   await getTasksRoute(request("GET", "/api/tasks"), deps);
-  expect(world.pets.get(USER_ID)?.state.hp).toBe(MAX_HP - 10);
+  expect(world.pets.get(USER_ID)?.state.hp).toBe(MAX_HP - 2 * DECAY_RATE_HP);
 });
 
 it("rejects a bad category", async () => {

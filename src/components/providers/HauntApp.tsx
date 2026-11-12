@@ -89,6 +89,7 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
           tasks={game.tasks}
           pending={game.pending}
           onComplete={(id) => void game.completeTask(id)}
+          onDelete={(id) => void game.deleteTask(id)}
           onReorder={(ids) => void game.reorder(ids)}
           onBreakdown={(id) => void game.requestBreakdown(id)}
         />

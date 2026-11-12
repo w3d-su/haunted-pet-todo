@@ -63,12 +63,12 @@ export const INITIAL_HUNGER = 100;
 export const INITIAL_MOOD = 100;
 
 // Decay per hour (applied by decayStats)
-export const DECAY_RATE_HP = 5;       // HP lost per hour with no tasks done
-export const DECAY_RATE_HUNGER = 8;   // Hunger lost per hour
-export const DECAY_RATE_MOOD = 6;     // Mood lost per hour
+export const DECAY_RATE_HP = 1;       // HP lost per hour with no tasks done
+export const DECAY_RATE_HUNGER = 2;   // Hunger lost per hour
+export const DECAY_RATE_MOOD = 1.5;   // Mood lost per hour
 
 // Zombie drain
-export const ZOMBIE_DRAIN_PER_HOUR = 3; // HP drained per zombie per hour
+export const ZOMBIE_DRAIN_PER_HOUR = 1; // HP drained per zombie per hour
 
 // Evolution thresholds
 export const EVOLVE_STREAK_THRESHOLD = 10;

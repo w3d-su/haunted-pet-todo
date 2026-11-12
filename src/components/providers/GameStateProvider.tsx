@@ -24,6 +24,7 @@ interface GameValue {
   refresh: () => Promise<void>;
   createTask: (draft: TaskDraft) => Promise<boolean>;
   completeTask: (id: string) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
   reorder: (orderedIds: readonly string[]) => Promise<void>;
   rebirth: () => Promise<void>;
   requestBreakdown: (id: string) => Promise<void>;
@@ -46,6 +47,20 @@ function markDone(tasks: readonly TaskView[], id: string): TaskView[] {
     subtasks: markDone(task.subtasks, id),
   }));
 }
+
+/** `id` and everything nested under it, children first. */
+function withDescendants(tasks: readonly TaskView[], id: string): string[] {
+  const collect = (task: TaskView): string[] => [...task.subtasks.flatMap(collect), task.id];
+  for (const task of tasks) {
+    if (task.id === id) return collect(task);
+    const nested = withDescendants(task.subtasks, id);
+    if (nested.length > 0) return nested;
+  }
+  return [];
+}
+
+/** How often an open, visible tab re-reads the pet and tasks. */
+const BACKGROUND_REFRESH_MS = 60_000;
 
 function vapidPublicKey(): string | null {
   const key = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -94,8 +109,14 @@ export function GameStateProvider({
   const [breakdownLine, setBreakdownLine] = useState<string | null>(null);
   const evolveTimer = useRef<number | null>(null);
   const petRef = useRef<PetState | null>(null);
+  // Bumped by every refresh and every action, so a slower, older read cannot
+  // overwrite what a newer one already showed.
+  const refreshGeneration = useRef(0);
+  const busyRef = useRef(false);
+  busyRef.current = loading || pending;
 
   const refresh = useCallback(async () => {
+    const generation = (refreshGeneration.current += 1);
     const [petResponse, taskResponse] = await Promise.all([
       gameRequest("/api/pet"),
       gameRequest("/api/tasks"),
@@ -109,6 +130,7 @@ export function GameStateProvider({
       clockOffsetMs: number;
     };
     const taskBody = (await taskResponse.json()) as { tasks: TaskView[]; now: number };
+    if (generation !== refreshGeneration.current) return;
     let nextPet = petBody.pet;
     const deathKey = `${nextPet.id}:${nextPet.diedAt ?? "spent"}`;
     if (
@@ -127,6 +149,7 @@ export function GameStateProvider({
         // The tombstone still shows the fallback line baked in at death.
       }
     }
+    if (generation !== refreshGeneration.current) return;
     setPet(nextPet);
     const transition = petTransitionSound(petRef.current, nextPet);
     petRef.current = nextPet;
@@ -230,7 +253,41 @@ export function GameStateProvider({
     };
   }, [locale, loading, error]);
 
+  // Decay and due dates move on while the tab sits open. Re-read when the tab
+  // comes back into view, and once a minute while it stays visible.
+  useEffect(() => {
+    if (loading) return;
+    let running = false;
+    async function quietRefresh() {
+      if (running || busyRef.current || document.visibilityState !== "visible") return;
+      running = true;
+      const recovering = petRef.current === null;
+      try {
+        await refresh();
+        if (recovering && petRef.current !== null) setError(null);
+      } catch {
+        // The next tick or the next action tries again.
+      } finally {
+        running = false;
+      }
+    }
+    function onWake() {
+      void quietRefresh();
+    }
+    const timer = window.setInterval(onWake, BACKGROUND_REFRESH_MS);
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    window.addEventListener("online", onWake);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      window.removeEventListener("online", onWake);
+    };
+  }, [loading, refresh]);
+
   async function run(action: () => Promise<void>) {
+    refreshGeneration.current += 1;
     setPending(true);
     setError(null);
     try {
@@ -287,6 +344,26 @@ export function GameStateProvider({
         play("task_complete");
         const body = (await response.json()) as { emitted?: { type: string }[]; pet?: PetState };
         if (!body.pet || !hpSpent(body.pet.hp)) noticeEvolution(body.emitted);
+        await refresh();
+      }),
+    deleteTask: (id) =>
+      run(async () => {
+        // The server keeps the children of a deleted task as root tasks, so remove them first.
+        const ids = withDescendants(tasks, id);
+        try {
+          for (const taskId of ids.length > 0 ? ids : [id]) {
+            const response = await gameRequest("/api/tasks", {
+              method: "DELETE",
+              body: JSON.stringify({ id: taskId }),
+            });
+            if (!response.ok && response.status !== 404) {
+              throw new Error(await failureMessage(response, en.errors.taskWouldNotVanish));
+            }
+          }
+        } catch (cause) {
+          await refresh().catch(() => {});
+          throw cause;
+        }
         await refresh();
       }),
     reorder: (orderedIds) =>

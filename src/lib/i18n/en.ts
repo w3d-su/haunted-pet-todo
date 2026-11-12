@@ -73,6 +73,10 @@ export const en = {
     moveUp: (title: string) => `Up, move ${title}`,
     moveDown: (title: string) => `Down, move ${title}`,
     complete: (title: string) => `Complete ${title}`,
+    delete: "Bury",
+    confirmDelete: "Sure?",
+    remove: (title: string) => `Delete ${title}`,
+    confirmRemove: (title: string) => `Confirm deleting ${title}`,
     breakDown: "Ask ghost to break this down 👻",
   },
   demo: {
@@ -166,6 +170,7 @@ export const en = {
     taskSlipped: "The task slipped through the floorboards.",
     taskWouldNotClose: "That task would not close.",
     listWouldNotShuffle: "The list would not shuffle.",
+    taskWouldNotVanish: "That task refused to stay buried.",
     eggNotReady: "The egg is not ready.",
     ghostCouldNotBreak: "The ghost could not break that down.",
     taskNeedsName: "A task needs a name",

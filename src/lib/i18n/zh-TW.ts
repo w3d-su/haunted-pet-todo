@@ -73,6 +73,10 @@ export const zhTW = {
     moveUp: (title: string) => `上移「${title}」`,
     moveDown: (title: string) => `下移「${title}」`,
     complete: (title: string) => `完成「${title}」`,
+    delete: "埋掉",
+    confirmDelete: "確定？",
+    remove: (title: string) => `刪除「${title}」`,
+    confirmRemove: (title: string) => `確認刪除「${title}」`,
     breakDown: "請幽靈幫我拆成小步驟 👻",
   },
   demo: {
@@ -162,6 +166,7 @@ export const zhTW = {
     taskSlipped: "任務從地板縫溜掉了。",
     taskWouldNotClose: "這個任務沒辦法劃掉。",
     listWouldNotShuffle: "清單不肯重新排序。",
+    taskWouldNotVanish: "這個任務不肯乖乖入土。",
     eggNotReady: "蛋還沒準備好。",
     ghostCouldNotBreak: "幽靈沒辦法把那個拆開。",
     taskNeedsName: "任務要有名字",

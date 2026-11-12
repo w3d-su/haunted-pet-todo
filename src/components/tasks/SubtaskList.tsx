@@ -8,11 +8,13 @@ export function SubtaskList({
   task,
   pending,
   onComplete,
+  onDelete,
   onBreakdown,
 }: {
   task: TaskView;
   pending: boolean;
   onComplete: (id: string) => void;
+  onDelete: (id: string) => void;
   onBreakdown: (id: string) => void;
 }) {
   const { t } = useLocale();
@@ -40,7 +42,18 @@ export function SubtaskList({
                   className="mt-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-pumpkin)]"
                   onChange={() => onComplete(subtask.id)}
                 />
-                <span className={done ? "line-through" : ""}>{subtask.title}</span>
+                <span className={`min-w-0 flex-1 [overflow-wrap:anywhere] ${done ? "line-through" : ""}`}>
+                  {subtask.title}
+                </span>
+                <button
+                  type="button"
+                  disabled={pending}
+                  aria-label={t.task.remove(subtask.title)}
+                  className="px-1 uppercase text-ghost-dim hover:text-blood-text disabled:text-ghost-dim focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-pumpkin)]"
+                  onClick={() => onDelete(subtask.id)}
+                >
+                  {t.task.delete}
+                </button>
               </li>
             );
           })}
