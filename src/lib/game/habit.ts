@@ -24,6 +24,15 @@ export function habitualHour(
   return hours.find((hour) => counts.get(hour) === top) ?? null;
 }
 
+/** Local hours when the fixed-time daily run stays silent: 22:00 up to 08:00. */
+export const QUIET_HOURS_START = 22;
+export const QUIET_HOURS_END = 8;
+
+/** True when `hour` (0–23, local) is inside the quiet hours. */
+export function isQuietHour(hour: number): boolean {
+  return hour >= QUIET_HOURS_START || hour < QUIET_HOURS_END;
+}
+
 /** The local hour the reminder waits for: the habit, or the default. */
 export function reminderHour(timestamps: readonly number[], timeZone: string): number {
   return habitualHour(timestamps, timeZone) ?? DEFAULT_REMINDER_HOUR;
