@@ -1,5 +1,7 @@
 import { listPetUserIds } from "@/lib/db/pet";
 import { createServiceClient } from "@/lib/db/client";
+import { hourFromTimestamp } from "@/lib/game/evolution";
+import { isQuietHour } from "@/lib/game/habit";
 import { hpSpent } from "@/lib/game/pet";
 import { sendPushNotification, type PushSendResult } from "@/lib/push/notify";
 import { serverEnv } from "@/lib/server/env";
@@ -30,7 +32,8 @@ export interface CronDeps {
   /**
    * Send the once-a-day nag from this run. Default true. Production sets it
    * false when `HOURLY_REMINDERS=true`, because `/api/cron/remind` then sends
-   * the nag at each user's local reminder hour.
+   * the nag at each user's local reminder hour. When this run does send, it
+   * skips a user whose local time is inside the quiet hours.
    */
   dailyNag?: boolean;
 }
@@ -58,6 +61,10 @@ export async function runDecayCron(request: Request, deps: CronDeps): Promise<Re
         processed += 1;
         if (before.state.status === "alive" && hpSpent(world.pet.hp)) deaths += 1;
         if (deps.dailyNag === false) return;
+        // This run fires at one UTC instant, which is the middle of the night
+        // somewhere. Skip those users before the day is claimed, so the hourly
+        // reminder can still reach them later that local day.
+        if (isQuietHour(hourFromTimestamp(world.now, world.pet.timeZone))) return;
         try {
           await remind(stores, world.pet, world.tasks, world.now, (subscription, payload) =>
             deps.deliverPush(subscription, payload),

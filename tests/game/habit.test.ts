@@ -1,6 +1,6 @@
 import fc from "fast-check";
 import { expect, it } from "vitest";
-import { DEFAULT_REMINDER_HOUR, habitualHour, reminderHour } from "@/lib/game/habit";
+import { DEFAULT_REMINDER_HOUR, habitualHour, isQuietHour, reminderHour } from "@/lib/game/habit";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -37,4 +37,15 @@ it("is null or an hour in 0..23", () => {
       return hour === null || (Number.isInteger(hour) && hour >= 0 && hour <= 23);
     }),
   );
+});
+
+it("treats 22:00 up to 08:00 as quiet hours", () => {
+  expect([21, 22, 23, 0, 7, 8].map((hour) => isQuietHour(hour))).toEqual([
+    false,
+    true,
+    true,
+    true,
+    true,
+    false,
+  ]);
 });

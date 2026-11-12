@@ -171,6 +171,7 @@ _User Story_: As a user, I want the daily nag to arrive around the hour I usuall
 - 11.2: `GET /api/cron/remind` SHALL require `Authorization: Bearer $CRON_SECRET` and return 401 otherwise. It SHALL only consider users with a push subscription.
 - 11.3: WHEN the local hour is at or past the reminder hour, THEN the route SHALL apply the conditions of 10.2 and send at most one nag for that local day. `claim_nag_day` is shared with the daily cron.
 - 11.4: WHEN `HOURLY_REMINDERS=true` on the server, THEN the daily cron SHALL NOT send the nag. It still runs decay.
+- 11.5: WHEN the daily cron does send the nag AND the user's local hour is from 22:00 up to 08:00, THEN the daily cron SHALL NOT send to that user and SHALL NOT claim the local day. The hourly route is not limited this way, because its hour comes from the user's own completions.
 - 11.5: `.github/workflows/remind.yml` SHALL call the route every hour with the repository secret `CRON_SECRET` and fail the run on a non-200 response.
 
 ---

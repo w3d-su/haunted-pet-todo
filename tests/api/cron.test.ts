@@ -203,6 +203,42 @@ it("sends one daily nag when work is open and nothing was finished today", async
   expect(sent).toHaveLength(0);
 });
 
+it("holds the daily nag for a user whose local time is in the quiet hours", async () => {
+  // The run is at 08:00 UTC: 04:00 in New York, 16:00 in Taipei.
+  const sentTo = async (timeZone: string) => {
+    const world = seed("hatchling");
+    const record = world.pets.get(USER_ID);
+    if (!record) throw new Error("missing pet");
+    world.pets.set(USER_ID, { ...record, state: { ...record.state, timeZone } });
+    world.pushes.push({
+      userId: USER_ID,
+      endpoint: "https://fcm.googleapis.com/fcm/send/haunt",
+      p256dh: "key",
+      auth: "secret",
+    });
+    let sent = 0;
+    const deps = cronDeps(world, SECRET);
+    deps.deliverPush = async () => {
+      sent += 1;
+      return "sent";
+    };
+    const response = await runDecayCron(
+      new Request("http://localhost/api/cron/decay", {
+        headers: { authorization: `Bearer ${SECRET}` },
+      }),
+      deps,
+    );
+    expect(response.status).toBe(200);
+    // The local day is 4 July in both zones. A second claim fails once the cron took it.
+    const stores = await deps.storesFor(USER_ID);
+    return { sent, dayLeft: await stores.nags.claimDay(USER_ID, "2026-07-04") };
+  };
+
+  expect(await sentTo("Asia/Taipei")).toEqual({ sent: 1, dayLeft: false });
+  // Nothing sent and the day is not claimed, so the hourly reminder can still send.
+  expect(await sentTo("America/New_York")).toEqual({ sent: 0, dayLeft: true });
+});
+
 it("drops a subscription the push service says is gone", async () => {
   const world = seed("hatchling");
   world.pushes.push({
