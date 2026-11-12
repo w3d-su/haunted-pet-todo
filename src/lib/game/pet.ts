@@ -226,6 +226,8 @@ export function applyTaskCompleted(
 
   const deltas = taskCompletionDeltas({
     status: event.wasOverdue ? "overdue" : "todo",
+    size: event.size,
+    subtask: event.subtask,
   });
   const day = calendarDay(event.completedAt, state.timeZone);
   const currentStreak =
@@ -496,6 +498,21 @@ export function clampFuturePetTimes(state: PetState, now: number): PetState {
     becameAdultAt,
     diedAt,
     recentCompletionTimestamps,
+  };
+}
+
+/**
+ * Move the pet to another IANA zone. The last completion keeps its instant
+ * and is filed under the day it falls on there, so a later completion on
+ * that same local day does not count as a new streak day.
+ */
+export function changeTimeZone(state: PetState, timeZone: string): PetState {
+  if (state.timeZone === timeZone) return state;
+  return {
+    ...state,
+    timeZone,
+    lastCompletionDay:
+      state.lastCompletionAt === null ? null : calendarDay(state.lastCompletionAt, timeZone),
   };
 }
 

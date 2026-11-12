@@ -244,7 +244,7 @@ it("stops a demo user at the task cap", async () => {
     );
     expect(overflow.status).toBe(429);
     const body = (await overflow.json()) as { error?: string };
-    expect(body.error).toMatch(/limited number of tasks/);
+    expect(body.error).toMatch(/Too many open tasks/);
     expect(demoWorldForSession().tasks.filter((task) => task.deletedAt === null)).toHaveLength(
       DEMO_TASK_CAP,
     );

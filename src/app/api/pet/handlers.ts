@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { applyPetEvent } from "@/lib/game/pet";
+import { isIanaTimeZone } from "@/lib/game/evolution";
+import { applyPetEvent, changeTimeZone } from "@/lib/game/pet";
 import { badRequest, conflict, json, readJson, storageFailure, unauthorized } from "@/lib/server/http";
 import type { AppDeps } from "@/lib/server/stores";
 import { syncWorld } from "@/lib/server/sync";
@@ -10,7 +11,7 @@ import { syncWorld } from "@/lib/server/sync";
  */
 const PetPatchSchema = z.union([
   z.object({ type: z.literal("REBIRTH") }).strict(),
-  z.object({ timeZone: z.string().min(1) }).strict(),
+  z.object({ timeZone: z.string().min(1).max(64) }).strict(),
 ]);
 
 export async function getPet(request: Request, deps: AppDeps): Promise<Response> {
@@ -37,11 +38,20 @@ export async function patchPet(request: Request, deps: AppDeps): Promise<Respons
     if (!parsed.success) return badRequest(parsed.error);
 
     if ("timeZone" in parsed.data) {
-      const world = await syncWorld(stores, deps.now(), null, deps.newId);
-      if (world.pet.timeZone !== parsed.data.timeZone) {
-        return conflict("Time zone is fixed when the pet is created");
-      }
-      return json({ pet: world.pet });
+      const timeZone = parsed.data.timeZone;
+      if (!isIanaTimeZone(timeZone)) return json({ error: "Unknown time zone" }, 400);
+      // A new pet is created in the zone it asks for.
+      const world = await syncWorld(stores, deps.now(), timeZone, deps.newId);
+      const moved = changeTimeZone(world.pet, timeZone);
+      if (moved === world.pet) return json({ pet: world.pet });
+      const saved = await stores.pets.save(moved, world.version);
+      if (!saved) return conflict("Pet changed while the time zone was saving");
+      await stores.events.appendEvent(stores.userId, "TIME_ZONE_CHANGED", {
+        from: world.pet.timeZone,
+        to: timeZone,
+        at: world.now,
+      });
+      return json({ pet: saved.state });
     }
 
     const world = await syncWorld(

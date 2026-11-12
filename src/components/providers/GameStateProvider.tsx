@@ -11,6 +11,12 @@ import type { TaskView } from "@/components/tasks/TaskList";
 import { breakdownFailureIsQuiet } from "@/components/tasks/breakdown-ui";
 import type { TaskDraft } from "@/components/tasks/TaskForm";
 
+/**
+ * `unavailable`: no VAPID key, or the browser has no Web Push.
+ * `blocked`: the player refused notifications; only browser settings undo that.
+ */
+export type ReminderState = "unavailable" | "off" | "on" | "blocked";
+
 interface GameValue {
   pet: PetState | null;
   tasks: TaskView[];
@@ -21,6 +27,7 @@ interface GameValue {
   error: string | null;
   evolving: boolean;
   breakdownLine: string | null;
+  reminders: ReminderState;
   refresh: () => Promise<void>;
   createTask: (draft: TaskDraft) => Promise<boolean>;
   completeTask: (id: string) => Promise<void>;
@@ -28,11 +35,15 @@ interface GameValue {
   reorder: (orderedIds: readonly string[]) => Promise<void>;
   rebirth: () => Promise<void>;
   requestBreakdown: (id: string) => Promise<void>;
+  enableReminders: () => Promise<void>;
+  disableReminders: () => Promise<void>;
 }
 
 const GameContext = createContext<GameValue | null>(null);
 /** One epitaph request per death. A failed call is not retried on the next refresh. */
 const epitaphTried = new Set<string>();
+/** One attempt per pet and zone, so a refused change is not sent on every refresh. */
+const zoneTried = new Set<string>();
 
 export function useGameState(): GameValue {
   const value = useContext(GameContext);
@@ -77,6 +88,42 @@ function urlBase64ToUint8Array(value: string): Uint8Array {
   return output;
 }
 
+function pushSupported(): boolean {
+  return (
+    vapidPublicKey() !== null &&
+    typeof Notification !== "undefined" &&
+    typeof navigator !== "undefined" &&
+    "serviceWorker" in navigator &&
+    typeof PushManager !== "undefined"
+  );
+}
+
+/**
+ * Send this browser's push subscription to the server. With `create` false
+ * only an existing subscription is sent. Never asks for permission.
+ * Returns true when the server stored it.
+ */
+async function saveSubscription(create: boolean, locale: string): Promise<boolean> {
+  const key = vapidPublicKey();
+  if (!key) return false;
+  const registration = await navigator.serviceWorker.register("/sw.js");
+  const existing = await registration.pushManager.getSubscription();
+  const subscription =
+    existing ??
+    (create
+      ? await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
+        })
+      : null);
+  if (!subscription) return false;
+  const response = await gameRequest("/api/push", {
+    method: "POST",
+    body: JSON.stringify({ ...subscription.toJSON(), locale }),
+  });
+  return response.ok;
+}
+
 async function failureMessage(response: Response, fallback: string): Promise<string> {
   try {
     const body = (await response.json()) as { error?: unknown };
@@ -107,6 +154,7 @@ export function GameStateProvider({
   const [error, setError] = useState<string | null>(null);
   const [evolving, setEvolving] = useState(false);
   const [breakdownLine, setBreakdownLine] = useState<string | null>(null);
+  const [reminders, setReminders] = useState<ReminderState>("unavailable");
   const evolveTimer = useRef<number | null>(null);
   const petRef = useRef<PetState | null>(null);
   // Bumped by every refresh and every action, so a slower, older read cannot
@@ -132,6 +180,25 @@ export function GameStateProvider({
     const taskBody = (await taskResponse.json()) as { tasks: TaskView[]; now: number };
     if (generation !== refreshGeneration.current) return;
     let nextPet = petBody.pet;
+    // The pet keeps the zone it was created in. Follow the browser when it differs,
+    // so days, streaks, and the reminder hour match where the player is now.
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zoneKey = `${nextPet.id}:${zone}`;
+    if (zone && nextPet.timeZone !== zone && !zoneTried.has(zoneKey)) {
+      zoneTried.add(zoneKey);
+      try {
+        const moved = await gameRequest("/api/pet", {
+          method: "PATCH",
+          body: JSON.stringify({ timeZone: zone }),
+        });
+        if (moved.ok) {
+          const body = (await moved.json()) as { pet?: PetState };
+          if (body.pet) nextPet = body.pet;
+        }
+      } catch {
+        // The pet stays in its old zone until the next page load.
+      }
+    }
     const deathKey = `${nextPet.id}:${nextPet.diedAt ?? "spent"}`;
     if (
       nextPet.status !== "tombstone" &&
@@ -193,61 +260,34 @@ export function GameStateProvider({
     // Boot once. Later writes call refresh themselves.
   }, [demoMode, refresh]);
 
+  // Permission is asked only from `enableReminders`, which a button calls.
+  // This effect never prompts. It reports where things stand and keeps an
+  // existing subscription's language current.
   useEffect(() => {
     if (loading || error) return;
-    const key = vapidPublicKey();
-    if (!key || typeof Notification === "undefined" || !("serviceWorker" in navigator)) return;
+    if (!pushSupported()) {
+      setReminders("unavailable");
+      return;
+    }
+    if (Notification.permission === "denied") {
+      setReminders("blocked");
+      return;
+    }
+    if (Notification.permission !== "granted") {
+      setReminders("off");
+      return;
+    }
     let cancelled = false;
-    async function subscribe() {
+    async function syncExisting() {
       try {
-        const permission = await Notification.requestPermission();
-        if (cancelled || permission !== "granted" || !key) return;
-        const registration = await navigator.serviceWorker.register("/sw.js");
-        const existing = await registration.pushManager.getSubscription();
-        const subscription =
-          existing ??
-          (await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(key) as BufferSource,
-          }));
-        if (cancelled) return;
-        await gameRequest("/api/push", {
-          method: "POST",
-          body: JSON.stringify({ ...subscription.toJSON(), locale: localeRef.current }),
-        });
+        const saved = await saveSubscription(false, locale);
+        if (!cancelled) setReminders(saved ? "on" : "off");
       } catch (cause) {
         console.error(cause);
+        if (!cancelled) setReminders("off");
       }
     }
-    function onGesture() {
-      void subscribe();
-    }
-    window.addEventListener("pointerdown", onGesture, { once: true });
-    return () => {
-      cancelled = true;
-      window.removeEventListener("pointerdown", onGesture);
-    };
-  }, [loading, error]);
-
-  useEffect(() => {
-    if (loading || error) return;
-    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    if (!("serviceWorker" in navigator)) return;
-    let cancelled = false;
-    async function syncPushLocale() {
-      try {
-        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
-        const subscription = await registration?.pushManager.getSubscription();
-        if (cancelled || !subscription) return;
-        await gameRequest("/api/push", {
-          method: "POST",
-          body: JSON.stringify({ ...subscription.toJSON(), locale }),
-        });
-      } catch (cause) {
-        console.error(cause);
-      }
-    }
-    void syncPushLocale();
+    void syncExisting();
     return () => {
       cancelled = true;
     };
@@ -309,6 +349,7 @@ export function GameStateProvider({
     error,
     evolving,
     breakdownLine,
+    reminders,
     refresh: () => run(refresh),
     createTask: async (draft) => {
       let created = false;
@@ -405,6 +446,40 @@ export function GameStateProvider({
         const body = (await response.json()) as { intro?: string };
         await refresh();
         setBreakdownLine(body.intro ?? null);
+      }),
+    enableReminders: () =>
+      run(async () => {
+        if (!pushSupported()) return;
+        const permission = await Notification.requestPermission();
+        if (permission === "denied") {
+          setReminders("blocked");
+          return;
+        }
+        if (permission !== "granted") return;
+        let saved = false;
+        try {
+          saved = await saveSubscription(true, localeRef.current);
+        } catch (cause) {
+          console.error(cause);
+        }
+        setReminders(saved ? "on" : "off");
+        if (!saved) throw new Error(en.errors.remindersFailed);
+      }),
+    disableReminders: () =>
+      run(async () => {
+        if (!pushSupported()) return;
+        const registration = await navigator.serviceWorker.getRegistration("/sw.js");
+        const subscription = await registration?.pushManager.getSubscription();
+        if (subscription) {
+          // Tell the server first. An unsubscribed browser can no longer name its endpoint.
+          const response = await gameRequest("/api/push", {
+            method: "DELETE",
+            body: JSON.stringify({ endpoint: subscription.endpoint }),
+          });
+          if (!response.ok) throw new Error(en.errors.remindersFailed);
+          await subscription.unsubscribe();
+        }
+        setReminders("off");
       }),
   };
 

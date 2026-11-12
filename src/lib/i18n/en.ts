@@ -31,6 +31,12 @@ export const en = {
     on: "Sound",
     off: "Muted",
   },
+  reminders: {
+    enable: "Turn on reminders",
+    on: "Reminders on",
+    hint: "At most one nudge a day, and only when a task is waiting.",
+    blocked: "Notifications are blocked. Allow them in the browser's site settings to get reminders.",
+  },
   stage: {
     egg: "egg",
     hatchling: "hatchling",
@@ -171,6 +177,8 @@ export const en = {
     taskWouldNotClose: "That task would not close.",
     listWouldNotShuffle: "The list would not shuffle.",
     taskWouldNotVanish: "That task refused to stay buried.",
+    tooManyTasks: "Too many open tasks. Finish or bury some first.",
+    remindersFailed: "The reminder bell would not ring. Try again.",
     eggNotReady: "The egg is not ready.",
     ghostCouldNotBreak: "The ghost could not break that down.",
     taskNeedsName: "A task needs a name",

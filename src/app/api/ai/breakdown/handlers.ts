@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { resolveBreakdown } from "@/lib/ai/breakdown";
 import { BREAKDOWN_CLAIM_LOST } from "@/lib/ai/messages";
-import { completeJson } from "@/lib/ai/llm";
+import { completeJson, modelConfigured } from "@/lib/ai/llm";
 import { dictionaryFor } from "@/lib/i18n/dictionaries";
 import { localeFromHeader } from "@/lib/i18n/locale";
 import type { Task } from "@/lib/game/tasks";
@@ -17,11 +17,17 @@ import {
 } from "@/lib/server/http";
 import type { AppDeps } from "@/lib/server/stores";
 import { syncWorld } from "@/lib/server/sync";
+import { openTasksFit, tooManyTasks, trimDoneTasks } from "@/lib/server/task-limits";
+
+/** `BreakdownResponseSchema` allows at most this many subtasks. */
+const MAX_SUBTASKS = 7;
 
 const BreakdownBodySchema = z.object({ taskId: z.uuid() }).strict();
 
 export interface BreakdownDeps extends AppDeps {
   completeJson(prompt: string): Promise<unknown | null>;
+  /** False when no model is set up. Absent means a model is there. */
+  modelAvailable?(): boolean;
 }
 
 export async function postBreakdown(request: Request, deps: BreakdownDeps): Promise<Response> {
@@ -52,6 +58,8 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
       });
     }
 
+    if (!openTasksFit(world.tasks, MAX_SUBTASKS)) return tooManyTasks();
+
     const claimed = await stores.tasks.claimBreakdown(task.id, stores.userId);
     if (!claimed) return conflict(BREAKDOWN_CLAIM_LOST);
 
@@ -60,8 +68,13 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
       const resolved = await resolveBreakdown(
         claimed,
         // Every attempt is a model call, so a retry spends budget too.
-        async (prompt) =>
-          (await stores.budget.take(stores.userId, deps.now())) ? deps.completeJson(prompt) : null,
+        // With no model there is no call, and no budget is spent.
+        async (prompt) => {
+          if (deps.modelAvailable?.() === false) return null;
+          return (await stores.budget.take(stores.userId, deps.now()))
+            ? deps.completeJson(prompt)
+            : null;
+        },
         locale,
       );
       for (let index = 0; index < resolved.body.subtasks.length; index += 1) {
@@ -92,6 +105,7 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
           at: world.now,
         });
       }
+      await trimDoneTasks(stores, world.tasks, created.length, world.now);
       return json({
         intro: resolved.body.intro,
         subtasks: created.map((item) => item.title),
@@ -118,5 +132,5 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
 
 export function productionBreakdownDeps(): BreakdownDeps {
   const base = productionDeps();
-  return { ...base, completeJson };
+  return { ...base, completeJson, modelAvailable: modelConfigured };
 }

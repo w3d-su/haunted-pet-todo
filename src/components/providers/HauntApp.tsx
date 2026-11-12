@@ -10,6 +10,7 @@ import { Tombstone } from "@/components/pet/Tombstone";
 import { TaskForm } from "@/components/tasks/TaskForm";
 import { TaskList, type TaskView } from "@/components/tasks/TaskList";
 import { DemoControls } from "@/components/ui/DemoControls";
+import { ReminderToggle } from "@/components/ui/ReminderToggle";
 import { ZombieLayer } from "@/components/zombies/ZombieLayer";
 import { GameStateProvider, useGameState } from "@/components/providers/GameStateProvider";
 import { useLocale } from "@/components/providers/LocaleProvider";
@@ -93,6 +94,14 @@ function HauntScreen({ demoMode }: { demoMode: boolean }) {
           onReorder={(ids) => void game.reorder(ids)}
           onBreakdown={(id) => void game.requestBreakdown(id)}
         />
+        {pet && !game.loading ? (
+          <ReminderToggle
+            state={game.reminders}
+            pending={game.pending}
+            onEnable={() => void game.enableReminders()}
+            onDisable={() => void game.disableReminders()}
+          />
+        ) : null}
         {demoMode ? (
           <DemoControls clockOffsetMs={game.clockOffsetMs} onRefresh={game.refresh} />
         ) : null}
