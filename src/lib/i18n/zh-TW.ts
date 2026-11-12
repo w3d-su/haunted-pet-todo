@@ -31,6 +31,12 @@ export const zhTW = {
     on: "音效",
     off: "靜音",
   },
+  reminders: {
+    enable: "開啟提醒",
+    on: "提醒已開啟",
+    hint: "一天最多提醒一次，而且只在還有任務沒做時才會提醒。",
+    blocked: "通知被封鎖了。請到瀏覽器的網站設定裡允許通知，才收得到提醒。",
+  },
   stage: {
     egg: "蛋",
     hatchling: "幼靈",
@@ -168,6 +174,7 @@ export const zhTW = {
     listWouldNotShuffle: "清單不肯重新排序。",
     taskWouldNotVanish: "這個任務不肯乖乖入土。",
     tooManyTasks: "未完成的任務太多了。先完成或埋掉一些。",
+    remindersFailed: "提醒鈴搖不響。再試一次。",
     eggNotReady: "蛋還沒準備好。",
     ghostCouldNotBreak: "幽靈沒辦法把那個拆開。",
     taskNeedsName: "任務要有名字",

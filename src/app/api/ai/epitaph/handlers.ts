@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { resolveEpitaph } from "@/lib/ai/epitaph";
-import { completeJson } from "@/lib/ai/llm";
+import { completeJson, modelConfigured } from "@/lib/ai/llm";
 import { localeFromHeader } from "@/lib/i18n/locale";
 import { applyPetEvent, FALLBACK_EPITAPH, hpSpent } from "@/lib/game/pet";
 import { serverEnv } from "@/lib/server/env";
@@ -23,6 +23,8 @@ export interface EpitaphDeps extends AppDeps {
   readonly cronSecret: string | undefined;
   storesFor(userId: string): Promise<AuthedStores>;
   completeJson(prompt: string): Promise<unknown | null>;
+  /** False when no model is set up. Absent means a model is there. */
+  modelAvailable?(): boolean;
 }
 
 /**
@@ -54,8 +56,13 @@ export async function postEpitaph(request: Request, deps: EpitaphDeps): Promise<
       world.pet,
       world.tasks,
       // Every attempt is a model call, so a retry spends budget too.
-      async (prompt) =>
-        (await stores.budget.take(stores.userId, deps.now())) ? deps.completeJson(prompt) : null,
+      // With no model there is no call, and no budget is spent.
+      async (prompt) => {
+        if (deps.modelAvailable?.() === false) return null;
+        return (await stores.budget.take(stores.userId, deps.now()))
+          ? deps.completeJson(prompt)
+          : null;
+      },
       localeFromHeader(request.headers.get("x-locale")),
     );
     const reduction = applyPetEvent(
@@ -103,5 +110,6 @@ export function productionEpitaphDeps(): EpitaphDeps {
     cronSecret: serverEnv("CRON_SECRET"),
     storesFor: (userId) => Promise.resolve(productionServiceStores(userId)),
     completeJson,
+    modelAvailable: modelConfigured,
   };
 }

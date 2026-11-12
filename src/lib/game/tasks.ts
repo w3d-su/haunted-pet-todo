@@ -1,9 +1,11 @@
 import {
   OVERDUE_TASK_HP_RESTORE,
   OVERDUE_TASK_HUNGER_RESTORE,
+  SUBTASK_REWARD_SHARE,
   TASK_HP_RESTORE,
   TASK_HUNGER_RESTORE,
   TASK_MOOD_BOOST,
+  TASK_SIZE_REWARD,
 } from "./constants";
 import type { GameEvent } from "./events";
 
@@ -54,27 +56,31 @@ export function isOverdue(task: Task, now: number): boolean {
   );
 }
 
-export function taskCompletionDeltas(task: Pick<Task, "status">): {
+/**
+ * What finishing a task gives the pet. A larger task gives more, a subtask
+ * gives a share of its size's reward, and an overdue task restores less.
+ * A missing size counts as `small`.
+ */
+export function taskCompletionDeltas(task: {
+  status: TaskStatus;
+  size?: TaskSize;
+  subtask?: boolean;
+}): {
   hungerRestore: number;
   hpRestore: number;
   moodBoost: number;
 } {
-  if (task.status === "overdue") {
-    return {
-      hungerRestore: OVERDUE_TASK_HUNGER_RESTORE,
-      hpRestore: OVERDUE_TASK_HP_RESTORE,
-      moodBoost: TASK_MOOD_BOOST,
-    };
-  }
+  const scale = TASK_SIZE_REWARD[task.size ?? "small"] * (task.subtask ? SUBTASK_REWARD_SHARE : 1);
+  const overdue = task.status === "overdue";
   return {
-    hungerRestore: TASK_HUNGER_RESTORE,
-    hpRestore: TASK_HP_RESTORE,
-    moodBoost: TASK_MOOD_BOOST,
+    hungerRestore: (overdue ? OVERDUE_TASK_HUNGER_RESTORE : TASK_HUNGER_RESTORE) * scale,
+    hpRestore: (overdue ? OVERDUE_TASK_HP_RESTORE : TASK_HP_RESTORE) * scale,
+    moodBoost: TASK_MOOD_BOOST * scale,
   };
 }
 
 export function makeTaskCompletedEvent(
-  task: Pick<Task, "id" | "status" | "category">,
+  task: Pick<Task, "id" | "status" | "category" | "size" | "parentId">,
   now: number,
 ): Extract<GameEvent, { type: "TASK_COMPLETED" }> {
   return {
@@ -83,6 +89,8 @@ export function makeTaskCompletedEvent(
     wasOverdue: task.status === "overdue",
     category: task.category,
     completedAt: now,
+    size: task.size,
+    subtask: task.parentId !== null,
   };
 }
 

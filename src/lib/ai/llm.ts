@@ -13,6 +13,11 @@ function parseModelJson(content: string): unknown | null {
   }
 }
 
+/** True when a model key is set. Without one `completeJson` returns null at once. */
+export function modelConfigured(): boolean {
+  return serverEnv("OPENAI_API_KEY") !== undefined;
+}
+
 /**
  * One JSON chat completion. Returns null when `OPENAI_API_KEY` is missing,
  * the call fails, or the body is not JSON. Never throws. Server-only.
