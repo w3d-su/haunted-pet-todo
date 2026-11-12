@@ -74,3 +74,25 @@ it("marks a past-due todo overdue once", () => {
   const second = markNewlyOverdue(first.tasks, NOW);
   expect(second.overdueTaskIds).toEqual([]);
 });
+
+it("scales the reward by size and halves it for a subtask", () => {
+  const base = taskCompletionDeltas({ status: "todo" });
+  expect(taskCompletionDeltas({ status: "todo", size: "small" })).toEqual(base);
+  expect(taskCompletionDeltas({ status: "todo", size: "medium" }).hpRestore).toBe(
+    TASK_HP_RESTORE * 1.5,
+  );
+  expect(taskCompletionDeltas({ status: "todo", size: "large" })).toEqual({
+    hungerRestore: TASK_HUNGER_RESTORE * 2,
+    hpRestore: TASK_HP_RESTORE * 2,
+    moodBoost: TASK_MOOD_BOOST * 2,
+  });
+  expect(taskCompletionDeltas({ status: "overdue", size: "large", subtask: true })).toEqual({
+    hungerRestore: OVERDUE_TASK_HUNGER_RESTORE,
+    hpRestore: OVERDUE_TASK_HP_RESTORE,
+    moodBoost: TASK_MOOD_BOOST,
+  });
+
+  const child = makeTaskCompletedEvent(task({ size: "medium", parentId: "parent" }), NOW);
+  expect(child).toMatchObject({ size: "medium", subtask: true });
+  expect(makeTaskCompletedEvent(task(), NOW)).toMatchObject({ size: "small", subtask: false });
+});

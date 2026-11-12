@@ -28,6 +28,24 @@ function shouldPersistCatchUp(before: PetState, caught: CatchUp, now: number): b
   return now - (before.lastTickAt ?? now) > CATCH_UP_PERSIST_MS;
 }
 
+/**
+ * Timeline row for a change that is already stored. The timeline is a log,
+ * not the source of truth, so a failed insert is reported and the request
+ * goes on: failing here would answer 500 for state that was saved, and the
+ * retry would find nothing left to log.
+ */
+async function logEvent(
+  stores: AuthedStores,
+  eventType: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await stores.events.appendEvent(stores.userId, eventType, payload);
+  } catch (error) {
+    console.error("event not logged", eventType, error);
+  }
+}
+
 function zoneFromHeader(header: string | null): string | null {
   if (!header || !isIanaTimeZone(header)) return null;
   return header;
@@ -86,7 +104,7 @@ async function catchUpOnce(
     stale = true;
     const marked = await stores.tasks.markOverdue(task.id, stores.userId);
     if (!marked) continue;
-    await stores.events.appendEvent(stores.userId, "TASK_OVERDUE", { taskId: task.id, at: now });
+    await logEvent(stores, "TASK_OVERDUE", { taskId: task.id, at: now });
   }
   const latestTasks = stale ? await stores.tasks.getTasks(stores.userId) : tasks;
   const caught = catchUp(record.state, latestTasks, now);
@@ -106,7 +124,7 @@ async function catchUpOnce(
     pet = saved.state;
     version = saved.version;
     for (const event of caught.emitted) {
-      await stores.events.appendEvent(stores.userId, event.type, { ...event, at: now });
+      await logEvent(stores, event.type, { ...event, at: now });
     }
   }
 

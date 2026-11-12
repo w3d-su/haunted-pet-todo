@@ -320,14 +320,15 @@ export async function deleteTask(request: Request, deps: AppDeps): Promise<Respo
     );
     const current = world.tasks.find((task) => task.id === parsed.data.id);
     if (!current) return notFound("Task not found");
+    // Delete first. A zombie is only logged as slain once its task is really gone.
+    const deleted = await stores.tasks.softDeleteTask(current.id, stores.userId, world.now);
+    if (!deleted) return notFound("Task not found");
     if (current.status === "overdue") {
       await stores.events.appendEvent(stores.userId, "ZOMBIE_SLAIN", {
         taskId: current.id,
         at: world.now,
       });
     }
-    const deleted = await stores.tasks.softDeleteTask(current.id, stores.userId, world.now);
-    if (!deleted) return notFound("Task not found");
     await stores.events.appendEvent(stores.userId, "TASK_DELETED", {
       taskId: current.id,
       at: world.now,

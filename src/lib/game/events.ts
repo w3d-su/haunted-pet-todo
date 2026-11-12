@@ -1,4 +1,5 @@
 import type { PetStage, PetState } from "./pet";
+import type { TaskSize } from "./tasks";
 
 /**
  * Things that happen to a pet.
@@ -12,6 +13,10 @@ export type GameEvent =
       wasOverdue: boolean;
       category: string;
       completedAt: number;
+      /** Absent on events logged before rewards followed size. Counts as `small`. */
+      size?: TaskSize;
+      /** True for a task that has a parent. */
+      subtask?: boolean;
     }
   | { type: "DECAY_TICK"; fromTime: number; toTime: number }
   | {

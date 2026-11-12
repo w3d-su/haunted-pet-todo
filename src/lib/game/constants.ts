@@ -27,3 +27,11 @@ export const OVERDUE_TASK_HUNGER_RESTORE = 10;
 export const OVERDUE_TASK_HP_RESTORE = 5;
 
 export const STREAK_BREAK_MOOD_PENALTY = 20;
+
+/**
+ * Reward multiplier by task size. `small` is the task form's default and the
+ * baseline the decay rates are tuned against.
+ */
+export const TASK_SIZE_REWARD = { small: 1, medium: 1.5, large: 2 } as const;
+/** A subtask is a slice of its parent, so it earns this share of its size's reward. */
+export const SUBTASK_REWARD_SHARE = 0.5;

@@ -160,7 +160,7 @@ describeDb("postgres concurrency", () => {
   it("completes the same task 20 times concurrently: one 200, nineteen 409s, no 500s", async () => {
     await resetRows();
     const deps = pgDeps(pool);
-    const created = await postTask(request("POST", "/api/tasks", { title: "Once" }), deps);
+    const created = await postTask(request("POST", "/api/tasks", { title: "Once", size: "small" }), deps);
     expect(created.status).toBe(201);
     const { task } = (await created.json()) as { task: { id: string } };
     await hatchling(40);
@@ -197,7 +197,7 @@ describeDb("postgres concurrency", () => {
     const ids: string[] = [];
     for (let index = 0; index < 4; index += 1) {
       const created = await postTask(
-        request("POST", "/api/tasks", { title: `Pg ${index}`, category: "chores" }),
+        request("POST", "/api/tasks", { title: `Pg ${index}`, category: "chores", size: "small" }),
         deps,
       );
       expect(created.status).toBe(201);
