@@ -226,6 +226,8 @@ export function applyTaskCompleted(
 
   const deltas = taskCompletionDeltas({
     status: event.wasOverdue ? "overdue" : "todo",
+    size: event.size,
+    subtask: event.subtask,
   });
   const day = calendarDay(event.completedAt, state.timeZone);
   const currentStreak =

@@ -135,7 +135,7 @@ it("twenty concurrent completions of one task yield one 200, nineteen 409s, and 
     clockOffsetMs: 0,
     version: 1,
   });
-  const created = await postTask(request("POST", "/api/tasks", { title: "Once" }), deps);
+  const created = await postTask(request("POST", "/api/tasks", { title: "Once", size: "small" }), deps);
   const { task } = (await created.json()) as { task: { id: string } };
   const responses = await Promise.all(
     Array.from({ length: 20 }, () =>
@@ -234,7 +234,7 @@ it("two concurrent completions produce one 200 and one 409", async () => {
     clockOffsetMs: 0,
     version: 1,
   });
-  const created = await postTask(request("POST", "/api/tasks", { title: "Once" }), deps);
+  const created = await postTask(request("POST", "/api/tasks", { title: "Once", size: "small" }), deps);
   const { task } = (await created.json()) as { task: { id: string } };
   const [first, second] = await Promise.all([
     patchTask(request("PATCH", "/api/tasks", { id: task.id, status: "done" }), deps),
@@ -260,7 +260,7 @@ it("concurrent completes of different tasks and concurrent reads do not 500 or d
   const ids: string[] = [];
   for (let index = 0; index < 4; index += 1) {
     const created = await postTask(
-      request("POST", "/api/tasks", { title: `Task ${index}`, category: "chores" }),
+      request("POST", "/api/tasks", { title: `Task ${index}`, category: "chores", size: "small" }),
       deps,
     );
     ids.push(((await created.json()) as { task: { id: string } }).task.id);

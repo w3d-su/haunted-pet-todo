@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { resolveBreakdown } from "@/lib/ai/breakdown";
 import { BREAKDOWN_CLAIM_LOST } from "@/lib/ai/messages";
-import { completeJson } from "@/lib/ai/llm";
+import { completeJson, modelConfigured } from "@/lib/ai/llm";
 import { dictionaryFor } from "@/lib/i18n/dictionaries";
 import { localeFromHeader } from "@/lib/i18n/locale";
 import type { Task } from "@/lib/game/tasks";
@@ -26,6 +26,8 @@ const BreakdownBodySchema = z.object({ taskId: z.uuid() }).strict();
 
 export interface BreakdownDeps extends AppDeps {
   completeJson(prompt: string): Promise<unknown | null>;
+  /** False when no model is set up. Absent means a model is there. */
+  modelAvailable?(): boolean;
 }
 
 export async function postBreakdown(request: Request, deps: BreakdownDeps): Promise<Response> {
@@ -66,8 +68,13 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
       const resolved = await resolveBreakdown(
         claimed,
         // Every attempt is a model call, so a retry spends budget too.
-        async (prompt) =>
-          (await stores.budget.take(stores.userId, deps.now())) ? deps.completeJson(prompt) : null,
+        // With no model there is no call, and no budget is spent.
+        async (prompt) => {
+          if (deps.modelAvailable?.() === false) return null;
+          return (await stores.budget.take(stores.userId, deps.now()))
+            ? deps.completeJson(prompt)
+            : null;
+        },
         locale,
       );
       for (let index = 0; index < resolved.body.subtasks.length; index += 1) {
@@ -125,5 +132,5 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
 
 export function productionBreakdownDeps(): BreakdownDeps {
   const base = productionDeps();
-  return { ...base, completeJson };
+  return { ...base, completeJson, modelAvailable: modelConfigured };
 }
