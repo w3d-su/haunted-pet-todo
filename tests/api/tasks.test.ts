@@ -366,3 +366,67 @@ it("rejects a bad category", async () => {
   );
   expect(response.status).toBe(400);
 });
+
+it("clears the overdue state when the due time is removed", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  const created = await postTask(
+    request("POST", "/api/tasks", { title: "Late", dueAt: NOW - 1000 }),
+    deps,
+  );
+  const { task } = (await created.json()) as { task: { id: string } };
+  await getTasksRoute(request("GET", "/api/tasks"), deps);
+  expect(world.tasks.find((item) => item.id === task.id)?.status).toBe("overdue");
+
+  const cleared = await patchTask(request("PATCH", "/api/tasks", { id: task.id, dueAt: null }), deps);
+  expect(cleared.status).toBe(200);
+  const body = (await cleared.json()) as { task: { status: string; dueAt: number | null } };
+  expect(body.task.status).toBe("todo");
+  expect(body.task.dueAt).toBeNull();
+});
+
+it("rejects an oversized title, oversized notes, and a due time Date cannot hold", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  const post = (body: unknown) => postTask(request("POST", "/api/tasks", body), deps);
+  expect((await post({ title: "x".repeat(120) })).status).toBe(201);
+  expect((await post({ title: "x".repeat(121) })).status).toBe(400);
+  expect((await post({ title: "Notes", notes: "x".repeat(2001) })).status).toBe(400);
+  expect((await post({ title: "Far", dueAt: 8_640_000_000_000_001 })).status).toBe(400);
+});
+
+it("refuses another open task past the cap and trims the oldest done tasks", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  const seed = (index: number, status: "todo" | "done") =>
+    world.tasks.push({
+      id: crypto.randomUUID(),
+      userId: USER_ID,
+      title: `${status} ${index}`,
+      notes: null,
+      category: "other",
+      size: "small",
+      status,
+      dueAt: null,
+      completedAt: status === "done" ? NOW - 1_000_000 + index : null,
+      deletedAt: null,
+      parentId: null,
+      breakdownSuggested: false,
+      allSubtasksDone: false,
+      sortOrder: index,
+      createdAt: NOW - 2_000_000,
+    });
+  for (let index = 0; index < 99; index += 1) seed(index, "todo");
+  for (let index = 0; index < 201; index += 1) seed(index, "done");
+
+  const fits = await postTask(request("POST", "/api/tasks", { title: "Hundredth" }), deps);
+  expect(fits.status).toBe(201);
+  const live = world.tasks.filter((task) => task.deletedAt === null);
+  expect(live.length).toBe(300);
+  expect(live.some((task) => task.title === "done 0")).toBe(false);
+  expect(live.some((task) => task.title === "done 1")).toBe(true);
+  expect(live.filter((task) => task.status !== "done").length).toBe(100);
+
+  const full = await postTask(request("POST", "/api/tasks", { title: "One too many" }), deps);
+  expect(full.status).toBe(429);
+});

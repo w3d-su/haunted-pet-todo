@@ -33,6 +33,8 @@ interface GameValue {
 const GameContext = createContext<GameValue | null>(null);
 /** One epitaph request per death. A failed call is not retried on the next refresh. */
 const epitaphTried = new Set<string>();
+/** One attempt per pet and zone, so a refused change is not sent on every refresh. */
+const zoneTried = new Set<string>();
 
 export function useGameState(): GameValue {
   const value = useContext(GameContext);
@@ -132,6 +134,25 @@ export function GameStateProvider({
     const taskBody = (await taskResponse.json()) as { tasks: TaskView[]; now: number };
     if (generation !== refreshGeneration.current) return;
     let nextPet = petBody.pet;
+    // The pet keeps the zone it was created in. Follow the browser when it differs,
+    // so days, streaks, and the reminder hour match where the player is now.
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const zoneKey = `${nextPet.id}:${zone}`;
+    if (zone && nextPet.timeZone !== zone && !zoneTried.has(zoneKey)) {
+      zoneTried.add(zoneKey);
+      try {
+        const moved = await gameRequest("/api/pet", {
+          method: "PATCH",
+          body: JSON.stringify({ timeZone: zone }),
+        });
+        if (moved.ok) {
+          const body = (await moved.json()) as { pet?: PetState };
+          if (body.pet) nextPet = body.pet;
+        }
+      } catch {
+        // The pet stays in its old zone until the next page load.
+      }
+    }
     const deathKey = `${nextPet.id}:${nextPet.diedAt ?? "spent"}`;
     if (
       nextPet.status !== "tombstone" &&

@@ -21,14 +21,26 @@ import {
 } from "@/lib/server/http";
 import type { AppDeps, AuthedStores } from "@/lib/server/stores";
 import { syncWorld, type World } from "@/lib/server/sync";
+import {
+  MAX_NOTES_LENGTH,
+  MAX_TIMESTAMP_MS,
+  MAX_TITLE_LENGTH,
+  openTasksFit,
+  tooManyTasks,
+  trimDoneTasks,
+} from "@/lib/server/task-limits";
+
+const title = z.string().trim().min(1).max(MAX_TITLE_LENGTH);
+const notes = z.string().max(MAX_NOTES_LENGTH).nullable();
+const dueAt = z.number().int().min(0).max(MAX_TIMESTAMP_MS).nullable();
 
 const CreateTaskBodySchema = z
   .object({
-    title: z.string().trim().min(1),
-    notes: z.string().nullable().optional(),
+    title,
+    notes: notes.optional(),
     category: z.enum(TASK_CATEGORIES).optional(),
     size: z.enum(TASK_SIZES).optional(),
-    dueAt: z.number().int().nullable().optional(),
+    dueAt: dueAt.optional(),
     parentId: z.uuid().nullable().optional(),
   })
   .strict();
@@ -36,11 +48,11 @@ const CreateTaskBodySchema = z
 const PatchTaskBodySchema = z
   .object({
     id: z.uuid(),
-    title: z.string().trim().min(1).optional(),
-    notes: z.string().nullable().optional(),
+    title: title.optional(),
+    notes: notes.optional(),
     category: z.enum(TASK_CATEGORIES).optional(),
     size: z.enum(TASK_SIZES).optional(),
-    dueAt: z.number().int().nullable().optional(),
+    dueAt: dueAt.optional(),
     status: z.literal("done").optional(),
     sortOrder: z.number().int().optional(),
   })
@@ -116,6 +128,7 @@ export async function postTask(request: Request, deps: AppDeps): Promise<Respons
       const parent = world.tasks.find((task) => task.id === parsed.data.parentId);
       if (!parent || parent.userId !== stores.userId) return notFound("Parent task not found");
     }
+    if (!openTasksFit(world.tasks, 1)) return tooManyTasks();
 
     const sortOrder = world.tasks.reduce((max, task) => Math.max(max, task.sortOrder), 0) + 1;
     const task: Task = {
@@ -141,6 +154,7 @@ export async function postTask(request: Request, deps: AppDeps): Promise<Respons
       title: saved.title,
       at: world.now,
     });
+    await trimDoneTasks(stores, world.tasks, 1, world.now);
     return json({ task: saved }, 201);
   } catch (error) {
     return storageFailure(error);
@@ -161,29 +175,18 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
     const parsed = PatchTaskBodySchema.safeParse(body);
     if (!parsed.success) return badRequest(parsed.error);
 
-    const existing = (await stores.tasks.getTasks(stores.userId)).find(
-      (task) => task.id === parsed.data.id,
-    );
-    if (!existing) return notFound("Task not found");
-
-    if (parsed.data.status === "done" && existing.status === "done") {
-      return conflict("Task is already done");
-    }
-    if (
-      existing.status === "done" &&
-      parsed.data.status !== undefined &&
-      parsed.data.status !== "done"
-    ) {
-      return conflict("Done tasks cannot change status");
-    }
-
     const world = await syncWorld(
       stores,
       deps.now(),
       request.headers.get("x-time-zone"),
       deps.newId,
     );
-    const current = world.tasks.find((task) => task.id === existing.id) ?? existing;
+    const current = world.tasks.find((task) => task.id === parsed.data.id);
+    if (!current) return notFound("Task not found");
+
+    if (parsed.data.status === "done" && current.status === "done") {
+      return conflict("Task is already done");
+    }
 
     if (parsed.data.status === "done") {
       return await completeTask(stores, current, world, parsed.data, deps);
@@ -197,10 +200,10 @@ export async function patchTask(request: Request, deps: AppDeps): Promise<Respon
     if (parsed.data.sortOrder !== undefined) next = { ...next, sortOrder: parsed.data.sortOrder };
     if (parsed.data.dueAt !== undefined) {
       next = { ...next, dueAt: parsed.data.dueAt };
+      // No due time, or one still ahead, is not overdue any more.
       if (
         current.status === "overdue" &&
-        parsed.data.dueAt !== null &&
-        parsed.data.dueAt > world.now
+        (parsed.data.dueAt === null || parsed.data.dueAt > world.now)
       ) {
         next = { ...next, status: "todo" };
       }
@@ -309,18 +312,14 @@ export async function deleteTask(request: Request, deps: AppDeps): Promise<Respo
     const parsed = DeleteTaskBodySchema.safeParse(candidate);
     if (!parsed.success) return badRequest(parsed.error);
 
-    const existing = (await stores.tasks.getTasks(stores.userId)).find(
-      (task) => task.id === parsed.data.id,
-    );
-    if (!existing) return notFound("Task not found");
-
     const world = await syncWorld(
       stores,
       deps.now(),
       request.headers.get("x-time-zone"),
       deps.newId,
     );
-    const current = world.tasks.find((task) => task.id === existing.id) ?? existing;
+    const current = world.tasks.find((task) => task.id === parsed.data.id);
+    if (!current) return notFound("Task not found");
     if (current.status === "overdue") {
       await stores.events.appendEvent(stores.userId, "ZOMBIE_SLAIN", {
         taskId: current.id,

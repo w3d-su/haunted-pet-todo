@@ -499,6 +499,21 @@ export function clampFuturePetTimes(state: PetState, now: number): PetState {
   };
 }
 
+/**
+ * Move the pet to another IANA zone. The last completion keeps its instant
+ * and is filed under the day it falls on there, so a later completion on
+ * that same local day does not count as a new streak day.
+ */
+export function changeTimeZone(state: PetState, timeZone: string): PetState {
+  if (state.timeZone === timeZone) return state;
+  return {
+    ...state,
+    timeZone,
+    lastCompletionDay:
+      state.lastCompletionAt === null ? null : calendarDay(state.lastCompletionAt, timeZone),
+  };
+}
+
 /** Display value. Not written back on read; `becameAdultAt` is the source of truth. */
 export function deriveHoursAsAdult(state: PetState, now: number): PetState {
   if (state.becameAdultAt === null) return state;

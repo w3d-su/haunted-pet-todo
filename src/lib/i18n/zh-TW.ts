@@ -167,6 +167,7 @@ export const zhTW = {
     taskWouldNotClose: "這個任務沒辦法劃掉。",
     listWouldNotShuffle: "清單不肯重新排序。",
     taskWouldNotVanish: "這個任務不肯乖乖入土。",
+    tooManyTasks: "未完成的任務太多了。先完成或埋掉一些。",
     eggNotReady: "蛋還沒準備好。",
     ghostCouldNotBreak: "幽靈沒辦法把那個拆開。",
     taskNeedsName: "任務要有名字",

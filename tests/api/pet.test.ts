@@ -77,3 +77,38 @@ it("applies catch-up decay from lastTickAt plus the stored offset", async () => 
   expect(body.pet.hp).toBe(MAX_HP - 3 * DECAY_RATE_HP);
   expect(body.pet.lastTickAt).toBe(NOW + 3 * 3_600_000);
 });
+
+it("moves the pet to a new time zone and refiles the last completion day", async () => {
+  const world = createMemoryWorld();
+  const deps = world.deps(USER_ID, NOW);
+  // 23:30 UTC on 3 July is already 4 July in Taipei.
+  const lastCompletionAt = Date.UTC(2026, 6, 3, 23, 30);
+  world.pets.set(USER_ID, {
+    state: {
+      ...initialPetState(USER_ID, NOW, crypto.randomUUID(), "UTC"),
+      stage: "hatchling",
+      currentStreak: 2,
+      lastCompletionAt,
+      lastCompletionDay: "2026-07-03",
+    },
+    clockOffsetMs: 0,
+    version: 1,
+  });
+
+  const moved = await patchPet(request("PATCH", "/api/pet", { timeZone: "Asia/Taipei" }), deps);
+  expect(moved.status).toBe(200);
+  const stored = world.pets.get(USER_ID)?.state;
+  expect(stored?.timeZone).toBe("Asia/Taipei");
+  expect(stored?.lastCompletionDay).toBe("2026-07-04");
+  expect(stored?.currentStreak).toBe(2);
+  expect(world.events.some((event) => event.eventType === "TIME_ZONE_CHANGED")).toBe(true);
+
+  const version = world.pets.get(USER_ID)?.version;
+  const same = await patchPet(request("PATCH", "/api/pet", { timeZone: "Asia/Taipei" }), deps);
+  expect(same.status).toBe(200);
+  expect(world.pets.get(USER_ID)?.version).toBe(version);
+
+  const bogus = await patchPet(request("PATCH", "/api/pet", { timeZone: "Mars/Olympus" }), deps);
+  expect(bogus.status).toBe(400);
+  expect(world.pets.get(USER_ID)?.state.timeZone).toBe("Asia/Taipei");
+});

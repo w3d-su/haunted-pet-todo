@@ -171,6 +171,7 @@ export const en = {
     taskWouldNotClose: "That task would not close.",
     listWouldNotShuffle: "The list would not shuffle.",
     taskWouldNotVanish: "That task refused to stay buried.",
+    tooManyTasks: "Too many open tasks. Finish or bury some first.",
     eggNotReady: "The egg is not ready.",
     ghostCouldNotBreak: "The ghost could not break that down.",
     taskNeedsName: "A task needs a name",

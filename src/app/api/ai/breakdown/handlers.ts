@@ -17,6 +17,10 @@ import {
 } from "@/lib/server/http";
 import type { AppDeps } from "@/lib/server/stores";
 import { syncWorld } from "@/lib/server/sync";
+import { openTasksFit, tooManyTasks, trimDoneTasks } from "@/lib/server/task-limits";
+
+/** `BreakdownResponseSchema` allows at most this many subtasks. */
+const MAX_SUBTASKS = 7;
 
 const BreakdownBodySchema = z.object({ taskId: z.uuid() }).strict();
 
@@ -51,6 +55,8 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
         source: "stored",
       });
     }
+
+    if (!openTasksFit(world.tasks, MAX_SUBTASKS)) return tooManyTasks();
 
     const claimed = await stores.tasks.claimBreakdown(task.id, stores.userId);
     if (!claimed) return conflict(BREAKDOWN_CLAIM_LOST);
@@ -92,6 +98,7 @@ export async function postBreakdown(request: Request, deps: BreakdownDeps): Prom
           at: world.now,
         });
       }
+      await trimDoneTasks(stores, world.tasks, created.length, world.now);
       return json({
         intro: resolved.body.intro,
         subtasks: created.map((item) => item.title),

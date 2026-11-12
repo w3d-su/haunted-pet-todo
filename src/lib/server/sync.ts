@@ -79,13 +79,16 @@ async function catchUpOnce(
 
   const now = effectiveNow(systemNow, record.clockOffsetMs);
   const tasks = await stores.tasks.getTasks(stores.userId);
+  let stale = false;
   for (const task of tasks) {
     if (task.status !== "todo" || !isOverdue(task, now)) continue;
+    // A miss means another request changed the row, so the list is stale either way.
+    stale = true;
     const marked = await stores.tasks.markOverdue(task.id, stores.userId);
     if (!marked) continue;
     await stores.events.appendEvent(stores.userId, "TASK_OVERDUE", { taskId: task.id, at: now });
   }
-  const latestTasks = await stores.tasks.getTasks(stores.userId);
+  const latestTasks = stale ? await stores.tasks.getTasks(stores.userId) : tasks;
   const caught = catchUp(record.state, latestTasks, now);
 
   let pet = caught.state;
