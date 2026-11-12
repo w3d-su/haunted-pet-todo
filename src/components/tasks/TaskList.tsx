@@ -21,12 +21,14 @@ export function TaskList({
   tasks,
   pending,
   onComplete,
+  onDelete,
   onReorder,
   onBreakdown,
 }: {
   tasks: readonly TaskView[];
   pending: boolean;
   onComplete: (id: string) => void;
+  onDelete: (id: string) => void;
   onReorder: (orderedIds: readonly string[]) => void;
   onBreakdown: (id: string) => void;
 }) {
@@ -68,6 +70,7 @@ export function TaskList({
           task={task}
           pending={pending}
           onComplete={onComplete}
+          onDelete={onDelete}
           onBreakdown={onBreakdown}
           onDragStart={setDraggedId}
           onDrop={drop}

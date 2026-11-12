@@ -196,7 +196,7 @@ describeDb("postgres task helpers, seq, and cron", () => {
     expect(record).not.toBeNull();
     const saved = await savePetState(
       supabase,
-      { ...record!.state, stage: "hatchling", hp: 4, lastTickAt: START },
+      { ...record!.state, stage: "hatchling", hp: 2, lastTickAt: START },
       record!.version,
     );
     expect(saved).not.toBeNull();
@@ -211,7 +211,7 @@ describeDb("postgres task helpers, seq, and cron", () => {
     };
     const denied = await runDecayCron(new Request("http://localhost/api/cron/decay"), cronBase);
     expect(denied.status).toBe(401);
-    expect((await getPetRecord(supabase, USER_ID))?.state.hp).toBe(4);
+    expect((await getPetRecord(supabase, USER_ID))?.state.hp).toBe(2);
 
     const ran = await runDecayCron(
       new Request("http://localhost/api/cron/decay", {

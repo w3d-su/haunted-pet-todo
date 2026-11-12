@@ -18,6 +18,7 @@ export function TaskItem({
   task,
   pending,
   onComplete,
+  onDelete,
   onBreakdown,
   onDragStart,
   onDrop,
@@ -27,6 +28,7 @@ export function TaskItem({
   task: TaskView;
   pending: boolean;
   onComplete: (id: string) => void;
+  onDelete: (id: string) => void;
   onBreakdown: (id: string) => void;
   onDragStart: (id: string) => void;
   onDrop: (targetId: string) => void;
@@ -36,6 +38,8 @@ export function TaskItem({
   const reduced = useReducedMotion() === true;
   const { t } = useLocale();
   const [flash, setFlash] = useState(false);
+  // Delete takes two presses. Leaving the button disarms it.
+  const [armed, setArmed] = useState(false);
   const done = task.status === "done";
   const upRef = useRef<HTMLButtonElement>(null);
   const downRef = useRef<HTMLButtonElement>(null);
@@ -156,12 +160,30 @@ export function TaskItem({
               {t.task.done}
             </PixelButton>
           )}
+          <PixelButton
+            aria-disabled={pending || undefined}
+            aria-label={armed ? t.task.confirmRemove(task.title) : t.task.remove(task.title)}
+            className={pending ? "border-ghost-dim text-ghost-dim" : armed ? "border-blood text-blood-text" : ""}
+            onBlur={() => setArmed(false)}
+            onClick={() => {
+              if (pending) return;
+              if (!armed) {
+                setArmed(true);
+                return;
+              }
+              setArmed(false);
+              onDelete(task.id);
+            }}
+          >
+            {armed ? t.task.confirmDelete : t.task.delete}
+          </PixelButton>
         </div>
       </div>
       <SubtaskList
         task={task}
         pending={pending}
         onComplete={onComplete}
+        onDelete={onDelete}
         onBreakdown={onBreakdown}
       />
     </li>

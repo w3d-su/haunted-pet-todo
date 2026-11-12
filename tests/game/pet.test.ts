@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  DECAY_RATE_HP,
   MAX_HP,
   TASK_HP_RESTORE,
   TASK_HUNGER_RESTORE,
@@ -114,7 +115,7 @@ it("does not bump the streak twice on the same calendar day", () => {
 });
 
 it("kills the pet when a decay tick reaches 0 HP and keeps the stage", () => {
-  const state = pet({ stage: "adult_scholar", hp: 5, lastTickAt: START });
+  const state = pet({ stage: "adult_scholar", hp: DECAY_RATE_HP, lastTickAt: START });
   const result = applyPetEvent(
     state,
     { type: "DECAY_TICK", fromTime: START, toTime: START + HOUR },
@@ -258,8 +259,8 @@ it("charges zombie drain only for the hours a task was actually overdue", () => 
   );
   expect(result.overdueTaskIds).toEqual(["task-1"]);
   expect(result.tasks[0]?.status).toBe("overdue");
-  // 10h of HP decay (50) plus 1h of one zombie (3).
-  expect(result.state.hp).toBe(47);
+  // 10h of HP decay plus 1h of one zombie.
+  expect(result.state.hp).toBe(100 - 10 * DECAY_RATE_HP - ZOMBIE_DRAIN_PER_HOUR);
   expect(result.state.status).toBe("alive");
 });
 

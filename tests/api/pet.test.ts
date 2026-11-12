@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { getPet, patchPet } from "@/app/api/pet/handlers";
-import { MAX_HP } from "@/lib/game/constants";
+import { DECAY_RATE_HP, MAX_HP } from "@/lib/game/constants";
 import { initialPetState } from "@/lib/game/pet";
 import { createMemoryWorld, request, USER_ID } from "../helpers/world";
 
@@ -74,6 +74,6 @@ it("applies catch-up decay from lastTickAt plus the stored offset", async () => 
   world.pets.set(USER_ID, { state, clockOffsetMs: 3 * 3_600_000, version: 1 });
   const response = await getPet(request("GET", "/api/pet"), world.deps(USER_ID, NOW));
   const body = (await response.json()) as { pet: { hp: number; lastTickAt: number } };
-  expect(body.pet.hp).toBe(MAX_HP - 15);
+  expect(body.pet.hp).toBe(MAX_HP - 3 * DECAY_RATE_HP);
   expect(body.pet.lastTickAt).toBe(NOW + 3 * 3_600_000);
 });

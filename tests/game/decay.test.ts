@@ -59,7 +59,7 @@ it("reduces stats by one hour of decay", () => {
 });
 
 it("clamps HP at 0 without dropping the rest of the interval", () => {
-  const state = pet({ hp: 3, stage: "adult", hunger: 40, lastTickAt: START });
+  const state = pet({ hp: DECAY_RATE_HP, stage: "adult", hunger: 40, lastTickAt: START });
   const next = decayStats(state, START + 2 * HOUR);
   expect(next.hp).toBe(0);
   expect(next.status).toBe("alive");
